@@ -2,6 +2,7 @@
 // Component Imports
 import BlogHeader from '../components/BlogHeader.astro';
 import BlogPostPreview from '../components/BlogPostPreview.astro';
+import Newsletter from '../components/Newsletter.astro';
 import SiteLayout from '../layouts/SiteLayout.astro';
 
 // Component Script:
@@ -28,5 +29,6 @@ allPosts = allPosts.sort((a, b) => new Date(b.frontmatter.publishDate).valueOf()
       p.frontmatter.draft === true || p.frontmatter.draft === "true" ? null :
       <BlogPostPreview post={p} />)}
     </section>
+    <Newsletter />
   </main>
 </SiteLayout>

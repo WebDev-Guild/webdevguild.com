@@ -1,5 +1,6 @@
 ---
 import Author from './Author.astro';
+import Newsletter from './Newsletter.astro';
 
 export interface Props {
 	title: string;
@@ -34,4 +35,7 @@ const { title, heroCredit, publishDate, heroImage, alt } = Astro.props;
 		class="prose xl:prose-xl dark:prose-invert mx-auto prose-a:text-blue-900 dark:prose-a:text-blue-300 hover:prose-a:text-blue-600 prose-headings:font-display">
 		<slot />
 	</main>
+	<footer>
+		<Newsletter />
+	</footer>
 </article>
