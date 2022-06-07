@@ -7,7 +7,7 @@ export interface Props {
 	permalink: string;
 	heroImage?: string
 }
-const { title, description, permalink, heroImage = "https://webdevguild.com/social.png" } = Astro.props;
+const { title, description, permalink, heroImage = "/social.png" } = Astro.props;
 ---
 
 <!-- Global Metadata -->
@@ -25,16 +25,18 @@ const { title, description, permalink, heroImage = "https://webdevguild.com/soci
 <meta property="og:url" content={permalink} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
-<meta property="og:image" content={heroImage} />
+<meta property="og:image" content={`https://webdevguild.com${heroImage}`} />
 
 <!-- Twitter -->
 <meta property="twitter:card" content="summary_large_image" />
 <meta property="twitter:url" content={permalink} />
 <meta property="twitter:title" content={title} />
 <meta property="twitter:description" content={description} />
-<meta property="twitter:image" content={heroImage} />
+<meta property="twitter:image" content={`https://webdevguild.com${heroImage}`} />
 
 <!-- Fonts -->
-<link rel="preconnect" href="https://fonts.gstatic.com" />
-<link rel="stylesheet"
-	href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@400;700&display=swap" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+	href="https://fonts.googleapis.com/css2?family=Exo:wght@400;500&family=Lato:ital,wght@0,400;0,700;1,300;1,400&display=swap"
+	rel="stylesheet">

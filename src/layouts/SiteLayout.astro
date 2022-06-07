@@ -13,7 +13,7 @@ const { title = 'WebDev Guild', description = 'Helping you find success in web d
 // https://docs.astro.build/core-concepts/astro-components/
 ---
 
-<html lang="en" class="bg-gray-100 dark:bg-gray-900">
+<html lang="en" class="bg-gray-100 dark:bg-gray-900 font-body">
 
 <head>
   <BaseHead title={title} description={description} permalink={permalink} {heroImage} />
@@ -28,7 +28,7 @@ const { title = 'WebDev Guild', description = 'Helping you find success in web d
       <slot />
     </main>
     <footer class="w-full mt-32 py-16 bg-indigo-200 dark:bg-gray-900">
-      <div class="xl:text-xl max-w-prose w-full mx-auto flex items-center gap-2 px-4">
+      <div class="xl:text-xl max-w-prose w-full mx-auto flex items-center gap-2 px-4 font-mono">
         <Logo class="h-8 text-gray-800 dark:text-gray-50" />
         WebDev Guild
       </div>

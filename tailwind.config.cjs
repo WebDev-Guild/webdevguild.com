@@ -5,7 +5,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Recursive", ...defaultTheme.fontFamily.sans],
+        display: ["Exo", ...defaultTheme.fontFamily.sans],
+        body: ["Lato", ...defaultTheme.fontFamily.sans],
+        mono: ["Fira Code", ...defaultTheme.fontFamily.mono],
       },
     },
   },

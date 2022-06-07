@@ -21,8 +21,8 @@ const twitterUrl = `https://twitter.com/${handle}/status/${id}`;
         <img src={avatarSrc} alt="" class="block w-12 h-12 rounded-3xl" />
         <div class="min-w-[8px] max-w-[8px]" />
         <div class="flex-1">
-          <div class="text-xs font-extrabold">{displayName}</div>
-          <div class="text-xs font-medium">@{handle}</div>
+          <div class="text-sm font-extrabold">{displayName}</div>
+          <div class="text-sm font-medium">@{handle}</div>
         </div>
         <svg viewBox="0 0 24 24" class="self-start w-6">
           <path fill="rgb(29,161,242)"
@@ -30,7 +30,7 @@ const twitterUrl = `https://twitter.com/${handle}/status/${id}`;
           </path>
         </svg>
       </header>
-      <div class="text-sm font-medium my-4">
+      <div class="text-base font-medium my-4">
         <slot />
       </div>
       <div class="min-w-[6px] max-w-[6px]" />

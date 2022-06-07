@@ -19,7 +19,8 @@ const { title, heroCredit, publishDate, heroImage, alt } = Astro.props;
 			<img class="rounded shadow-lg" loading="lazy" src={heroImage} alt={alt} />
 			<figcaption set:html={heroCredit} class="text-sm text-center text-gray-500"></figcaption>
 		</figure>}
-		<h1 class="text-4xl text-center md:text-6xl mt-4 md:mt-8">{title}</h1>
+		<h1 class="font-display font-bold text-4xl text-center md:text-6xl leading-snug md:leading-snug mt-4 md:mt-8">
+			{title}</h1>
 		<p class="justify-center flex items-center gap-2 !m-0 !my-4 text-base text-gray-700 dark:text-gray-400">
 			<time datetime={publishDate}>{new
 				Date(publishDate).toLocaleDateString("en-US",{ year:
@@ -30,7 +31,7 @@ const { title, heroCredit, publishDate, heroImage, alt } = Astro.props;
 		</p>
 	</header>
 	<main
-		class="prose xl:prose-xl dark:prose-invert mx-auto prose-a:text-blue-900 dark:prose-a:text-blue-300 hover:prose-a:text-blue-600">
+		class="prose xl:prose-xl dark:prose-invert mx-auto prose-a:text-blue-900 dark:prose-a:text-blue-300 hover:prose-a:text-blue-600 prose-headings:font-display">
 		<slot />
 	</main>
 </article>
