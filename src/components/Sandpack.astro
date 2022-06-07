@@ -1,0 +1,12 @@
+---
+import Sandpack, { cssTextOutput } from "./react/SandpackReact";
+import fs from 'fs/promises';
+const { files = {}, ...props } = Astro.props
+const processedFiles = (Object.fromEntries(await Promise.all(Object.entries(files).map(async ([key, value]) => {
+  return [key, await fs.readFile(`./src/components/${value}`, 'utf-8')]
+}))));
+
+
+---
+
+<Sandpack client:visible {...props} files={processedFiles} />

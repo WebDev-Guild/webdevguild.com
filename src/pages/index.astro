@@ -1,0 +1,32 @@
+---
+// Component Imports
+import BlogHeader from '../components/BlogHeader.astro';
+import BlogPostPreview from '../components/BlogPostPreview.astro';
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+// Component Script:
+// You can write any JavaScript/TypeScript that you'd like here.
+// It will run during the build, but never in the browser.
+// All variables are available to use in the HTML template below.
+let title = 'WebDev Guild';
+let permalink = 'https://webdevguild.com';
+
+// Data Fetching: List all Markdown posts in the repo.
+
+let allPosts = await Astro.glob('./blog/**/*.md');
+allPosts = allPosts.sort((a, b) => new Date(b.frontmatter.publishDate).valueOf() - new Date(a.frontmatter.publishDate).valueOf());
+
+// Full Astro Component Syntax:
+// https://docs.astro.build/core-concepts/astro-components/
+---
+
+<SiteLayout {title} {permalink}>
+  <BlogHeader />
+  <main class="max-w-prose mx-auto">
+    <section aria-label="Blog post list">
+      {allPosts.map((p) =>
+      p.frontmatter.draft === true || p.frontmatter.draft === "true" ? null :
+      <BlogPostPreview post={p} />)}
+    </section>
+  </main>
+</SiteLayout>

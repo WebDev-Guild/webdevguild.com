@@ -1,0 +1,32 @@
+---
+import readingTime from 'reading-time';
+import Author from './Author.astro';
+
+export interface Props {
+	post: any;
+}
+
+const { post } = Astro.props;
+
+---
+
+<a href={post.url}>
+	<article class="ring-0 hover:ring-4 ring-indigo-500 transition-shadow rounded mb-16 p-2">
+		<header class="mb-2">
+			<img src={post.frontmatter.heroImage} alt={post.frontmatter.title} class="rounded shadow-xl" loading="lazy" />
+			<h1 class="text-4xl mt-4 mb-6">{post.frontmatter.title}</h1>
+			<p class="flex items-center gap-2 !m-0 text-base text-gray-700 dark:text-gray-400">
+				<time datetime={post.frontmatter.publishDate} class="publish-date">{new
+					Date(post.frontmatter.publishDate).toLocaleDateString("en-US",{ year:
+					'numeric',
+					month: 'long', day: 'numeric' })}</time>
+				<span>·</span>
+				<Author name="Alex Anderson" href="https://twitter.com/ralex1993" />
+				<span>·</span>
+				<span>{readingTime(post.rawContent()).text}</span>
+			</p>
+
+		</header>
+		<p>{post.frontmatter.description}</p>
+	</article>
+</a>
