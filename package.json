@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@codesandbox/sandpack-react": "^1.1.1",
+    "@floating-ui/dom": "^0.5.2",
     "@react-three/fiber": "^8.0.21",
     "@tailwindcss/typography": "^0.5.2",
     "preact": "^10.7.2",
