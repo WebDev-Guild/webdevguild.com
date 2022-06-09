@@ -25,7 +25,7 @@ it was such a huge unlock for my mental model of building and debugging websites
 
 When Tim Berners-Lee introduced the world to the Web in 1991, he demonstrated a new <Tooltip content="Predefined instructions that two computers use to communicate">protocol</Tooltip> to get <Tooltip content="Resources could be documents, files, images, scripts, data saved in a database, or any other thing the server can transmit to the client.">resources</Tooltip> from a server to a client that was simple, fast, and extensible. HTTP has since become one of the most common protocols used on the internet.
 
-Even still, it's something web developers take for granted - browsers, web servers, and the `fetch` API take care of most of the hard stuff for us. But the [60,000 word RFC](https://datatracker.ietf.org/doc/html/rfc2616) (that's "Request for comment", the way standards bodies propose new standards) hides quite a few fun things you might not have known.
+Even still, it's something web developers take for granted - browsers, web servers, and the `fetch` API take care of most of the hard stuff for us. But the [68,000 word RFC](https://datatracker.ietf.org/doc/html/rfc9110) (that's "Request for comment", the way standards bodies propose new standards) hides quite a few fun things you might not have known.
 
 So, at the risk of being clickbait-y, here are 10 surprising things you didn't know about HTTP.
 
@@ -184,11 +184,11 @@ Of course, since HTTP is just text you could use anything you want as the method
 
 In HTTP, the request sends a method and the response sends a status code. Status codes are split into 5 groups, going from 1xx to 5xx. You are probably familiar with `200 OK`, `404 Not Found`, and `500 Internal Server Error`, but did you know about `429 Too Many Requests`? How about `507 Insufficient Storage`? Or the complicated `451 Unavailable For Legal Reasons`?
 
-These [status codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status) can be used by your server however you see appropriate. Some codes have to be used in certain situations, like `101 Switching Protocols` when opening a Websocket connection or `308 Permanent Redirect` when redirecting a resource. Others, like `409 Conflict` have such a narrow use-case that I've never seen it used in practice.
+These [status codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status) can be used by your server however you see appropriate. Some codes have to be used in certain situations, like `101 Switching Protocols` when opening a Websocket connection or `308 Permanent Redirect` when redirecting a resource. Others aren't required but might give more specific context, like using `409 Conflict` to indicate a resource already exists, such as when uploading a file twice.
 
 <Aside title="🫖">
 
-[`418 I'm a teapot`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/418) is an actual status code that was added to HTTP in 1998 as an April Fools joke. There's now [a movement](https://save418.com) to keep this status code in the spec.
+[`418 I'm a teapot`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/418) is an actual status code that was added to HTTP in 1998 as an April Fools joke. There was [a movement](https://save418.com) to keep this status code in the spec which was resolved as of June 2022 in [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#name-418-unused).
 
 </Aside>
 
@@ -208,7 +208,7 @@ Servers used to use the User-Agent header for browser detection... until other b
 
 Some of these headers are required by the spec, like `Host`, which tells the server which domain the request is for. This allows multiple domains to be hosted on a single server and enables load balancing for forwarding requests to multiple servers.
 
-When I was researching this, I discovered there is a `Cache-Control` _request_ header, which gives the client a way to override the server's default behavior for caching. It's added when you do a force-reload in a web browser, which clears the browser cache and sends the `Cache-Control: no-cache` header to tell the server to send a fresh response, regardless of whether the server has a cached version.
+When I was researching this, I discovered there is a `Cache-Control` _request_ header, which gives the client a way to override the server's default behavior for caching. It's added when you do a force-reload in a web browser, which clears the browser cache and sends the `Cache-Control: no-cache` header to tell the server to send a fresh response. (Of course, it's up to the server whether it does or not.)
 
 <Aside title="Intermediary Servers">
 
@@ -307,3 +307,10 @@ HTTP/3 was [just standardized](https://twitter.com/programmingart/status/1533908
 ---
 
 As ubiquitous as it is, HTTP still has some fun surprises. Did you learn anything new? Am I missing something? If so, <TweetLink>let me know</TweetLink>. I'd love to hear from you!
+
+**Edits:**
+
+- Updated the RFC link in the intro to the latest RFC 9110.
+- Improved the explanation of the `Cache-Control` request header.
+- Added a common example of the `409 Conflict` status code.
+- Included more context about the `418 I'm a Teapot` status, which was updated in RFC 9110.
