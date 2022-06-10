@@ -20,6 +20,7 @@
     "react-dom": "^18.1.0"
   },
   "dependencies": {
+    "@astrojs/rss": "^0.2.0",
     "@codesandbox/sandpack-react": "^1.1.1",
     "@floating-ui/dom": "^0.5.2",
     "@react-three/fiber": "^8.0.21",
