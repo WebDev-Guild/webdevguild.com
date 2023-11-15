@@ -1,0 +1,143 @@
+---
+const {
+  id,
+  avatarSrc,
+  displayName,
+  handle,
+  date,
+  includeMetrics,
+  numberOfLikes,
+  numberOfConversations,
+} = Astro.props
+const twitterUrl = `https://twitter.com/${handle}/status/${id}`;
+
+---
+
+<div class="not-prose">
+  <a target="_blank" rel="noopener noreferer" href={twitterUrl} aria-label="Opens Tweet on Twitter in a new tab"
+    class="block no-underline mx-auto max-w-lg text-inherit p-4 border border-gray-700 dark:border-gray-300 bg-gray-900/0 dark:bg-gray-900/40 transition-colors rounded-md hover:bg-indigo-100/20 hover:dark:bg-gray-900/10 hover:text-black hover:dark:text-white">
+    <article>
+      <header class="flex items-center">
+        <img src={avatarSrc} alt="" class="block w-12 h-12 rounded-3xl" />
+        <div class="min-w-[8px] max-w-[8px]" />
+        <div class="flex-1">
+          <div class="text-sm font-extrabold">{displayName}</div>
+          <div class="text-sm font-medium">@{handle}</div>
+        </div>
+        <svg viewBox="0 0 24 24" class="self-start w-6">
+          <path fill="rgb(29,161,242)"
+            d="M23.643 4.937c-.835.37-1.732.62-2.675.733a4.67 4.67 0 002.048-2.578 9.3 9.3 0 01-2.958 1.13 4.66 4.66 0 00-7.938 4.25 13.229 13.229 0 01-9.602-4.868c-.4.69-.63 1.49-.63 2.342A4.66 4.66 0 003.96 9.824a4.647 4.647 0 01-2.11-.583v.06a4.66 4.66 0 003.737 4.568 4.692 4.692 0 01-2.104.08 4.661 4.661 0 004.352 3.234 9.348 9.348 0 01-5.786 1.995 9.5 9.5 0 01-1.112-.065 13.175 13.175 0 007.14 2.093c8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602a9.47 9.47 0 002.323-2.41z">
+          </path>
+        </svg>
+      </header>
+      <div class="text-base font-medium my-4">
+        <slot />
+      </div>
+      <div class="min-w-[6px] max-w-[6px]" />
+      <p class="text-xs font-medium">{date}</p>
+      {includeMetrics && (
+      <>
+        <hr class="border-0 border-b border-gray-700 dark:border-gray-300 my-3" />
+        <div class="flex items-center justify-between -mb-1">
+          <div class="flex items-center text-gray-600 dark:text-gray-400  font-medium text-xs gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd"
+                d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                clip-rule="evenodd" />
+            </svg>
+            {numberOfLikes}
+          </div>
+          <div class="hidden md:block">
+            <div class="flex items-center text-gray-600 dark:text-gray-400  font-medium text-xs gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+              </svg>
+              {numberOfConversations} people are Tweeting about
+              this
+            </div>
+          </div>
+        </div>
+      </>
+      )}
+    </article>
+  </a>
+</div>
+<!-- 
+const Link = styled.a`
+display: block;
+text-decoration: none;
+max-width: 450px;
+color: inherit;
+padding: 16px;
+border: 1px solid var(--color-gray-300);
+border-radius: 16px;
+font-family: system-ui, -apple-system, BlinkMacSystemFont,
+'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif;
+
+&:hover {
+background: var(--color-gray-100);
+}
+`;
+const Wrapper = styled.article``;
+
+const Header = styled.header`
+display: flex;
+align-items: center;
+`;
+
+const Avatar = styled.img`
+display: block;
+width: 48px;
+height: 48px;
+border-radius: 24px;
+`;
+
+const UserInfo = styled.div`
+flex: 1;
+`;
+
+const DisplayName = styled.div`
+font-size: 15px;
+line-height: 1.3;
+color: var(--color-gray-1000);
+font-weight: 800;
+`;
+
+const Handle = styled.div`
+font-size: 15px;
+line-height: 1.3;
+font-weight: 500;
+color: var(--color-gray-600);
+`;
+
+const Body = styled.div`
+font-size: 18px;
+padding: 16px 0 0;
+font-weight: 500;
+white-space: pre-wrap;
+line-height: 1.25;
+color: var(--color-gray-1000);
+`;
+
+const Divider = styled.hr`
+border: none;
+margin: 12px 0;
+border-bottom: 1px solid var(--color-gray-300);
+`;
+
+const Date = styled.p`
+font-size: 15px;
+font-weight: 500;
+color: var(--color-gray-600);
+`;
+
+const MetricsWrapper = styled.div`
+display: flex;
+align-items: center;
+margin-bottom: -4px;
+
+& > *:not(:last-child) {
+margin-right: 24px;
+}
+`;
+export default FakeTweet; -->

@@ -1,0 +1,260 @@
+---
+title: Shrinking Data with Serialization
+publishDate: 2022-06-10
+excerpt: When bandwidth is a limited commodity, this trick can help shrink your data.
+featureImage: 
+  alt: "A cat sitting in a box"
+  src: "/assets/blog/binary-serialization.jpg"
+  caption: 'Photo by <a href="https://unsplash.com/@jiaweizhao?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Jiawei Zhao</a> on <a href="https://unsplash.com/s/photos/parcel?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a>'
+---
+
+import Aside from '../../components/Aside.astro'
+import Tooltip from '../../components/Tooltip.astro'
+import TweetLink from '../../components/TweetLink.astro'
+
+Most of the time when we send data around, we use text formats, like JSON. `JSON.stringify` and `JSON.parse` are really fast, but serializing anything to a string is going to make the package larger compared to its binary counterpart.
+
+For most situations, this doesn't matter. But when you need to keep bandwidth low, perhaps for a real-time multiplayer game or [web worker communication](https://surma.dev/things/is-postmessage-slow/), every bit of data counts.
+
+Take `1` for example - as a number, it can literally be stored with a single binary bit. The string `"1"` on the other hand required a full byte, 8 times as much memory as the number.
+
+<Aside title="Numbers and Strings in JavaScript">
+
+All JavaScript numbers are represented as [IEEE 754 double-precision floating-point numbers](https://steve.hollasch.net/cgindex/coding/ieeefloat.html). That means they are always stored in 64 bits, or 8 bytes. Strings are encoded in UTF-8, which takes 2 bytes per character.
+
+So the irony is the number `1` takes up more memory than the string `"1"` in JavaScript.
+
+For our purposes, we're just interested in how much data is being sent over the wire.
+
+</Aside>
+
+## What is this for?
+
+I'm in the process of building a real-time spaceship game called [Thorium Nova](https://thoriumsim.com) that I want to run over the internet, so I need to be careful about how I allocate bandwidth. When the player is looking at a starmap, the server sends them a message 10 times a second that includes the position and <Tooltip content="Stored as a 4-term quaternion">rotation</Tooltip> of each ship. The message also includes metadata that the client can use for [linear interpolation](https://gafferongames.com/post/snapshot_interpolation/) between network messages to keep animations at 60fps.
+
+```json
+{
+  "id": "abc123",
+  "time": 1654789171491,
+  "state": [
+    {
+      "id": 1,
+      "x": 57832,
+      "y": -1692,
+      "z": 105858235,
+      "r": {
+        "x": 0.3535533845424652,
+        "y": 0.3535533845424652,
+        "z": 0.1464466154575348,
+        "w": 0.8535534143447876
+      }
+    }
+  ]
+}
+```
+
+Serializing this data with a single ship to JSON creates a string _187 bytes_. That's our baseline - let's see if we can make it smaller.
+
+<Aside mode="question" title="What does it matter?">
+
+187 bytes might not seem like much, but that's just for one ship. I don't know how many ships Thorium Nova will support, but suppose it's 1000. That expands the message to over 14,000 bytes. That's 1.12 megabits per second with 10 messages per second. Sure, high-speed internet connections can easily handle that, but I can't count on my users having speedy connections and I need a bit more bandwidth for all of the low-frequency data too.
+
+</Aside>
+
+There are [dozens](https://en.wikipedia.org/wiki/Comparison_of_data-serialization_formats) of serialization formats. So, where do we start?
+
+## MessagePack
+
+JSON is obviously the easiest serialization format for JavaScript - it's built right in! One that's _almost_ as easy is [MessagePack](https://msgpack.org). Just install `@msgpack/msgpack` from NPM, and you can encode and decode with ease! The object is encoded into a `Uint8Array` which is more compact than JSON.
+
+```js
+import { encode, decode } from "@msgpack/msgpack";
+
+// ...
+
+const encodedMessage = encode(data);
+```
+
+<Aside mode="question" title="What's the catch?">
+
+MessagePack might seem too good to be true, but there are two things to consider when using it. First, it's going to add a few kilobytes to your JavaScript bundle if you use it in a browser. Not a ton, but enough to consider whether you really need it.
+
+The second is the CPU cost to serialize and deserialize. Depending on the size of your message and how fast the CPU is, MessagePack might take longer to serialize than JSON.
+
+</Aside>
+
+When we encode our message, the resulting `Uint8Array` has a length of _101 bytes_, or 45% less than the JSON string!
+
+The cool thing about MessagePack is we didn't have to tell it anything about our data - we just throw an object at it and it serializes it into something really small.
+
+But what if the serializer did know something about our data, like what shape it had and how big each of the values could be? Maybe then we could make it even smaller.
+
+## Schema serialization
+
+Schema serialization lets you shrink data even more by not including any of the structure in the message, just the data itself. The schema is shared between the sender and receiver and is used to put the structure back into the data once it's arrived at its destination.
+
+This only works if the messages all have the same shape and each value has the same byte length. That limits us a bit - we can't have excessively large strings - but our message fits into those constraints.
+
+In essence, the serialized data will look something like this, where each chunk of data is tacked on to the end:
+
+```
+abc1231654789171491157832-1692105858235...
+|----||-----------|||---||---||-------|
+```
+
+Of course, we won't just cram the data together. Instead, we'll convert it to its binary representation, making sure that each chunk is always the same length. Then, to deserialize it, we just pull off each chunk by its size and convert it back to the appropriate type.
+
+<Aside title="How Binary Data Works">
+
+If you already know the difference between a double and an unsigned integer, what an ArrayBuffer is, and [the different kinds of JavaScript TypedArrays](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray#typedarray_objects), you can probably skip this. Otherwise, you'll probably want to read this quick primer on how binary data is represented before going on.
+
+<details>
+<summary>See More</summary>
+
+You probably know that a binary bit is either 0 or 1. 8 bits is one byte, and bytes can be used to represent numbers, strings, and other data. JavaScript uses [ArrayBuffers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer), which represents raw binary data as a list of bytes - numbers from 0 to 255.
+
+To create numbers bigger than 255, you have to combine multiple bytes together. For example, since 255 is represented by 8 bits, it is considered an 8 bit number; adding another byte creates a 16 bit number, which goes up to 65535. [TypedArrays](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray) do that by interpreting certain lengths of bytes in an Array buffer as a specific numerical type. You can see the whole list of these types in [this table](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray#typedarray_objects).
+
+These types follow two basic principles. First, in order include a <Tooltip content="To indicate the number is negative">sign</Tooltip> with a number, you need to sacrifice a bit for the sign. So a signed 8 bit number only has 7 bits to represent the number and one bit for the sign, making its range -128 to 127. The default type is signed - unsigned types include the prefix `U` as in `Uint8Array`.
+
+Second, each successive data type doubles the number of bytes, so a single byte is `Int8Array`, two bytes is `Int16Array`, four bytes for `Int32Array`, etc.
+
+Numbers with decimals are called floats, or doubles, and their binary representation is a little weird - [this guide](https://steve.hollasch.net/cgindex/coding/ieeefloat.html) explains it much better than I can.
+
+What about strings? In JavaScript, each character of a string is represented with two bytes, where each value represents a specific character in the UTF-16 encoding. The `String.prototype.charCodeAt()` method lets you pass an index and returns a the binary number that represents that character, and `String.fromCharCode()` lets you pass a number and get the character it represents.
+
+</details>
+
+</Aside>
+
+The main struggle with this plan is that we're mixing different types of data in the same ArrayBuffer, so we can't just use a TypedArray. And manually reading and converting the binary using bitwise operators is a huge hassle. Instead, we can rely on another built-in JavaScript object: DataView.
+
+## Mixing binary data with DataView
+
+[DataView's purpose](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DataView) is to combine multiple types of binary data together in one ArrayBuffer. You do that by creating a new ArrayBuffer, building a DataView with it, and then calling `view.setUint8()` (or its other setter methods) with a byte index and the data you want to put at that index. The DataView will convert the data to the correct binary type and put it in the ArrayBuffer for you. By keeping track of the byte index, you can create a predictable sequence of data.
+
+So, lets create an encoder for our message, starting with the string ID. Each byte of the string can be stored as a `Uint8`.
+
+```js
+const buffer = new ArrayBuffer(8192);
+const dataView = new DataView(buffer);
+let byteIndex = 0;
+
+for (let i = 0; i < message.id.length; i++) {
+  dataView.setUint8(byteIndex, message.id.charCodeAt(i));
+  byteIndex++;
+}
+```
+
+We do run into a slight problem with our time value - it's too long for a `Uint32`, which means we need to represent it as a `BigUInt64`, which only accepts a `BigInt` value. Notice how we have to increment our byte index by the number of bytes that the type takes up.
+
+```js
+dataView.setBigUint64(byteIndex, message.time);
+byteIndex += 8;
+```
+
+<Aside title="Choosing a type">
+
+To keep the serialized data as small as possible, we should choose the smallest possible type we can for whatever our data is. Using 8 bytes for this value is a bit wasteful.
+
+Instead of sending the entire Unix timestamp, an alternative approach could use a separate mechanism to tell the client the current server time. Then this message only sends the time difference, which could be stored in a `Uint32`.
+
+</Aside>
+
+Next, we'll loop over our state array and append each value with the appropriate type. We're assuming the ID value doesn't go above 65535, so we can use `Uint16` for the first value. The positions all need to be signed, so we'll use `Int32`. And the rotations must have decimal points, but they don't need to be as precise, so we'll use `Float32`.
+
+```js
+message.state.forEach((entity) => {
+  dataView.setUint32(bytes, entity.id);
+  bytes += 4;
+  dataView.setInt32(bytes, entity.x);
+  bytes += 4;
+  dataView.setInt32(bytes, entity.y);
+  bytes += 4;
+  dataView.setInt32(bytes, entity.z);
+  bytes += 4;
+  dataView.setFloat32(bytes, entity.r.x);
+  bytes += 4;
+  dataView.setFloat32(bytes, entity.r.y);
+  bytes += 4;
+  dataView.setFloat32(bytes, entity.r.z);
+  bytes += 4;
+  dataView.setFloat32(bytes, entity.r.w);
+  bytes += 4;
+});
+```
+
+And our ArrayBuffer is done! But when we initialized it, we had to give it a starting size. The rest of those bytes are just empty space, so we'll want to create a new array ArrayBuffer and copy over the data from the old one.
+
+```js
+const newBuffer = new ArrayBuffer(bytes);
+const view = new DataView(newBuffer);
+
+// copy all data to a new (resized) ArrayBuffer
+for (let i = 0; i < bytes; i++) {
+  view.setUint8(i, dataView.getUint8(i));
+}
+```
+
+The great thing about this is we can easily know the size of this data - just look at the bytes value! Our data now fits in a staggering _46 bytes_, which is 75% smaller than the initial 186 bytes. Plus, each additional ship only adds 32 more bytes.
+
+What about deserializing at the end? Well, since we know exactly what shape the data is in, we can easily use the opposite DataView methods to get the appropriate data out.
+
+```js
+function deserialize(buffer) {
+  const view = new DataView(buffer);
+  let byteIndex = 0;
+  let id = "";
+  for (let i = 0; i < 6; i++) {
+    const char = String.fromCharCode(view.getUint8(byteIndex));
+    id += char;
+    byteIndex++;
+  }
+  const time = Number(view.getBigUint64(byteIndex));
+  byteIndex += 8;
+
+  const state = [];
+
+  while (byteIndex < view.byteLength) {
+    let entity = { r: {} };
+    entity.id = view.getUint32(byteIndex);
+    byteIndex += 4;
+    entity.x = view.getInt32(byteIndex);
+    byteIndex += 4;
+    entity.y = view.getInt32(byteIndex);
+    byteIndex += 4;
+    entity.z = view.getInt32(byteIndex);
+    byteIndex += 4;
+    entity.r.x = view.getFloat32(byteIndex);
+    byteIndex += 4;
+    entity.r.y = view.getFloat32(byteIndex);
+    byteIndex += 4;
+    entity.r.z = view.getFloat32(byteIndex);
+    byteIndex += 4;
+    entity.r.w = view.getFloat32(byteIndex);
+    byteIndex += 4;
+    state.push(entity);
+  }
+
+  const message = {
+    id,
+    time,
+    state,
+  };
+  return message;
+}
+```
+
+And this method is _fast_ too. Even with 10,000 ships, the serialization process only takes 5 milliseconds. Here's the stats for the others when serializing 10,000 items.
+
+| Format   | Size (bytes) | Time  |
+| -------- | ------------ | ----- |
+| JSON     | 1,540,042    | 13ms  |
+| MsgPack  | 850,030      | 35ms  |
+| DataView | 440,010      | 4.8ms |
+
+Obviously this only works in a narrow set of cases - your data has to have a predictable format and your values are constrained to the binary data types. Even still, if you need every bit of bandwidth you can muster, this is a great tool to keep on hand.
+
+---
+
+Do you have a use for ArrayBuffers and DataView? <TweetLink>Send me a tweet</TweetLink>. I'm curious to see what others are doing with this.

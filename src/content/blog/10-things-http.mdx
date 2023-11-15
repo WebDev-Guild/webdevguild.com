@@ -1,0 +1,316 @@
+---
+title: 10 Surprising Things You Didn't Know About HTTP
+publishDate: 'Jun 7 2022'
+excerpt: HTTP is a staple of the web, but that doesn't mean it doesn't have some secrets.
+featureImage:
+  src: '/assets/blog/10-things-http.jpg'
+  alt: A reddish orange building with intricate architecture
+  caption: 'Photo by <a href="https://unsplash.com/@saaoudi?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">yassine saaoudi</a> on <a href="https://unsplash.com/s/photos/http?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a>'
+---
+
+import Aside from '../../components/Aside.astro';
+import Tooltip from '../../components/Tooltip.astro';
+import TweetLink from '../../components/TweetLink.astro';
+import FakeTweet from '../../components/FakeTweet.astro';
+
+Sometimes you realize a topic is so fundamental that you've never taken the time to really dive into what it is. <Tooltip content="Thats HyperText Transfer Protocol, but like SCUBA, HTTP has pretty much become its own word.">HTTP</Tooltip> is one of those topics for me.
+
+<FakeTweet handle="crim_codes" id="1532846167440117761" displayName="austin crim" avatarSrc="https://pbs.twimg.com/profile_images/1631798626421727240/34EyrNYA_400x400.jpg" date="Jun 3, 2022" numberOfLikes="16" numberOfConversations="4" includeMetrics={true}>
+
+learning HTTP and how it interacts with the browser should be early on in web dev learning roadmaps.
+
+it was such a huge unlock for my mental model of building and debugging websites.
+
+</FakeTweet>
+
+When Tim Berners-Lee introduced the world to the Web in 1991, he demonstrated a new <Tooltip content="Predefined instructions that two computers use to communicate">protocol</Tooltip> to get <Tooltip content="Resources could be documents, files, images, scripts, data saved in a database, or any other thing the server can transmit to the client.">resources</Tooltip> from a server to a client that was simple, fast, and extensible. HTTP has since become one of the most common protocols used on the internet.
+
+Even still, it's something web developers take for granted - browsers, web servers, and the `fetch` API take care of most of the hard stuff for us. But the [68,000 word RFC](https://datatracker.ietf.org/doc/html/rfc9110) (that's "Request for comment", the way standards bodies propose new standards) hides quite a few fun things you might not have known.
+
+So, at the risk of being clickbait-y, here are 10 surprising things you didn't know about HTTP.
+
+## 1. It's just text.
+
+HTTP works by sending a request to a server, which then processes the request and sends back the response. Ultimately, both of these are just formatted packets of text. You can see the request and response in the network tab of your web browser.
+
+`cURL` is another great tool for seeing the raw text - just put `-v` at the end of your command to see the entire request and response process.
+
+```bash
+curl http://example.com -v
+```
+
+<Aside title="Raw HTTP Text">
+
+Give that command a try, or check below to see the raw output.
+
+<details>
+<summary>Show More</summary>
+
+```
+*   Trying 93.184.216.34:80...
+* Connected to example.com (93.184.216.34) port 80 (#0)
+> GET / HTTP/1.1
+> Host: example.com
+> User-Agent: curl/7.79.1
+> Accept: */*
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Age: 600961
+< Cache-Control: max-age=604800
+< Content-Type: text/html; charset=UTF-8
+< Date: Mon, 06 Jun 2022 13:59:45 GMT
+< Etag: "3147526947+ident"
+< Expires: Mon, 13 Jun 2022 13:59:45 GMT
+< Last-Modified: Thu, 17 Oct 2019 07:18:26 GMT
+< Server: ECS (bsa/EB23)
+< Vary: Accept-Encoding
+< X-Cache: HIT
+< Content-Length: 1256
+<
+<!doctype html>
+<html>
+<head>
+    <title>Example Domain</title>
+
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type="text/css">
+    body {
+        background-color: #f0f0f2;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+    }
+    div {
+        width: 600px;
+        margin: 5em auto;
+        padding: 2em;
+        background-color: #fdfdff;
+        border-radius: 0.5em;
+        box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
+    }
+    a:link, a:visited {
+        color: #38488f;
+        text-decoration: none;
+    }
+    @media (max-width: 700px) {
+        div {
+            margin: 0 auto;
+            width: auto;
+        }
+    }
+    </style>
+</head>
+
+<body>
+<div>
+    <h1>Example Domain</h1>
+    <p>This domain is for use in illustrative examples in documents. You may use this
+    domain in literature without prior coordination or asking for permission.</p>
+    <p><a href="https://www.iana.org/domains/example">More information...</a></p>
+</div>
+</body>
+</html>
+* Connection #0 to host example.com left intact
+```
+
+</details>
+
+</Aside>
+
+So if HTTP is just text being sent around, how does that text get from the client to the server?
+
+## 2. It's built on TCP/IP (but works with any transport protocol).
+
+The first part of the cURL output shows a TCP/IP connection being established. This is a transport protocol for sending data over the internet. You can see cURL connects to the server's IP address on port 80, the default HTTP port. Browsers automatically add the correct port, so you don't usually see it in the URI. HTTPS uses 443, but web developers know HTTP(s) can work on any port, like 3000 or 8888.
+
+<Aside title="The nitty-gritty">
+
+Knowing the details of how TCP/IP works isn't necessary for building apps that use HTTP, but shows how HTTP builds upon existing internet protocols.
+
+<details>
+<summary>Show More</summary>
+
+The `IP` part of TCP/IP is the Internet Protocol, an [OSI](https://en.wikipedia.org/wiki/OSI_model) layer 3 protocol which defines IP addresses. TCP is an OSI layer 4 protocol which specifies ports, allowing a single server at a specific IP address to let multiple applications receive network requests.
+
+Making an HTTP request starts with the TCP handshake, a series of messages back and forth to establish a connection between the client and the server. The client opens a random port to receive the request on, sends a <Tooltip content="Synchronize">`SYN`</Tooltip> packet to the server, waits for a <Tooltip content="Synchronize Acknowledge">`SYN`-`ACK`</Tooltip> packet from the server, and then sends a final <Tooltip content="Acknowledge">`ACK`</Tooltip> packet back to the server, establishing the connection.
+
+Then the packet is formed, which includes the client's IP address, the IP address of the server, the client's random port, and the server port - 80, or 443.
+
+The final part of the packet is the payload, which is the text of the HTTP request.
+
+The packet is then sent to the network router, which forwards it along from router to router until it finally ends up at the server. Each jump to a new router modifies the packet slightly, adding the router's IP address so the server knows how to send the packet back to the client.
+
+The response packet looks very much like the request packet, except its destination is the client, and it includes the HTTP response payload.
+
+</details>
+
+</Aside>
+
+Since HTTP is just text, there's no reason it can't use a different transport protocol, like the unreliable UDP/IP, or the joke [IPoAC](https://en.wikipedia.org/wiki/IP_over_Avian_Carriers). HTTP/3 is even switching to the QUIC protocol to get lower latency and higher bandwidth, but we'll talk more about that later.
+
+## 3. It ended up superseding other protocols like FTP.
+
+Protocols for transferring files existed for 20+ years before HTTP came along, but none of them were well suited for what HTTP was designed to do.
+
+Take FTP, the de-facto file-transfer protocol before HTTP. It was robust and reliable, but had a lot of issues though that made it a poor choice for the simple, ephemeral file transfers that HTTP enables.
+
+FTP's protocol takes a long time to establish the initial connection because of the numerous commands that need to be sent back and forth. Once the initial connection is created, it opens additional connections on random ports to actually transfer the files, which adds even more overhead. It commonly requires authentication for every transfer, which makes it cumbersome for anonymous web browsing.
+
+It also becomes really messy for making sure networks and firewalls can support the connections, since the files are transferred using separate connections on random ports. If the firewall isn't configured to allow connections on that port, the file transfer fails.
+
+HTTP is more reliable, lightweight, and stateless - once the request/response lifecycle is complete, the connection can be closed. And HTTP connections are really cheap to open - you just send a request.
+
+FTP, Usenet, and other pre-HTTP protocols still have their place, but HTTP is especially well-suited for the web browsing era of the internet.
+
+## 4. HTTP methods are both really picky and really flexible.
+
+The HTTP RFCs require servers to support two HTTP methods: `GET`, which delivers a resource, and `HEAD`, which delivers just the headers.
+
+> The methods GET and HEAD MUST be supported by all general-purpose servers.
+
+Everything else is optional (but the server can respond with `405 Method Not Allowed` or `501 Not Implemented` status codes if it wants.)
+
+The spec gives two distinctions to methods. "Safe" methods, which include `GET` and `HEAD` should only retrieve data, not perform actions or side-effects. "Idempotent" methods, including `GET`, `HEAD`, `PUT`, `DELETE`, and `OPTIONS`, should take the exact same actions or side-effects when performed multiple times. For example, a `PUT` request to update my username should cause the same result when executed again with the same request body.
+
+This means that two `POST` or `PATCH` requests with the same body should perform two separate actions, like creating two to-do items with the same content.
+
+Of course, since HTTP is just text you could use anything you want as the method. Naturally, you can't expect any server to support bespoke HTTP methods, but if you wanted your server to respond to `BOB` requests, nobody is stopping you.
+
+## 5. There are status codes for everything.
+
+In HTTP, the request sends a method and the response sends a status code. Status codes are split into 5 groups, going from 1xx to 5xx. You are probably familiar with `200 OK`, `404 Not Found`, and `500 Internal Server Error`, but did you know about `429 Too Many Requests`? How about `507 Insufficient Storage`? Or the complicated `451 Unavailable For Legal Reasons`?
+
+These [status codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status) can be used by your server however you see appropriate. Some codes have to be used in certain situations, like `101 Switching Protocols` when opening a Websocket connection or `308 Permanent Redirect` when redirecting a resource. Others aren't required but might give more specific context, like using `409 Conflict` to indicate a resource already exists, such as when uploading a file twice.
+
+<Aside title="🫖">
+
+[`418 I'm a teapot`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/418) is an actual status code that was added to HTTP in 1998 as an April Fools joke. There was [a movement](https://save418.com) to keep this status code in the spec which was resolved as of June 2022 in [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#name-418-unused).
+
+</Aside>
+
+Some applications, like GraphQL, eschew status codes entirely and just include errors as part of a `200 OK` response body. However your server does it, these status codes are intended to improve the user experience for anyone accessing your server.
+
+## 6. HTTP headers affect the request and response in surprising ways.
+
+HTTP allows for headers on both requests and responses - the client can send extra metadata to the server, and the server sends extra metadata back.
+
+Usually these are used for `Authorization`, telling the server what content types the client will `Accept`, or the `User-Agent` string of the client.
+
+<Aside title="User-Agent is going away">
+
+Servers used to use the User-Agent header for browser detection... until other browsers [started mimicking each other](https://webaim.org/blog/user-agent-string-history/). Chrome is even [phasing out the User-Agent header](https://developer.chrome.com/blog/user-agent-reduction-deprecation-trial/) in favor of [Client Hints](https://web.dev/migrate-to-ua-ch/).
+
+</Aside>
+
+Some of these headers are required by the spec, like `Host`, which tells the server which domain the request is for. This allows multiple domains to be hosted on a single server and enables load balancing for forwarding requests to multiple servers.
+
+When I was researching this, I discovered there is a `Cache-Control` _request_ header, which gives the client a way to override the server's default behavior for caching. It's added when you do a force-reload in a web browser, which clears the browser cache and sends the `Cache-Control: no-cache` header to tell the server to send a fresh response. (Of course, it's up to the server whether it does or not.)
+
+<Aside title="Intermediary Servers">
+
+A lot of the headers are designed to be used by intermediary servers that sit between the client and the origin server. These include CDNs and proxy servers, which are a huge part of what makes the web as fast and usable as it is today.
+
+Instead of making it all the way to the origin server, request headers like `Keep-Alive`, `Connection`, and `Transfer-Encoding` are sent hop-by-hop between each of the intermediary servers, as a way to broker the connection between them as part of the request.
+
+</Aside>
+
+Here are a few more handy headers:
+
+- `Clear-Site-Data` - Tells the browser to clear browser data related to that website, like login cookies.
+- `Content-Disposition` - This response header can tell the browser to download the resource instead of displaying it in the browser. This makes it possible to download HTML files directly from the server.
+- `From` - This request header should include the email for the human user who made the request. While that may seem weird for regular web browsers, it makes perfect sense for web crawler bots! A crawler operator can include `From` in a gesture of good faith so a server admin can contact them if the crawler is behaving badly.
+- `Retry-After` - If a request fails for some reason, like for planned downtime or a rate-limiting policy, the server can tell the client when to retry the request.
+- `Save-Data` - A request header that lets the client indicate they want to reduce their data usage, so the server should send a smaller response - perhaps a simplified version of the site with less markup and styling.
+- `Server-Timing` - A header that sends performance metrics to the client. You can include timing values, like how long it took to read from the database, or flags, like whether the request was a cache hit or miss. These metrics show up in the browser's network devtools under the "Timing" tab, or with the [`PerformanceServerTiming`](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceServerTiming) interface.
+
+That last one might leave you scratching your head. HTTP headers _must_ go at the beginning of the request and response, but it might be helpful to send the server timing metrics at _after_ the request body has been sent. For that, HTTP supports Trailers.
+
+## 7. Trailers let you send metadata at the end of a response (but you shouldn't use them).
+
+Adding stuff after a response isn't simple - how will the client even know that extra stuff isn't part of the body?
+
+First, the server tells the client what trailers it is sending by setting the `Trailer` header to `Server-Timing`. Note that some `Trailer` values [are not allowed](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#directives) since they only make sense _before_ the response body.
+
+Then, once the response body has been sent, the trailer values can be sent.
+
+Using Node's `http` module, it looks something like this.
+
+```js
+const server = http.createServer(async function (req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    Trailer: 'Server-Timing'
+  });
+
+  const dbStart = performance.now();
+  const data = await db.getData();
+  const dbTime = performance.now() - dbStart;
+
+  res.write(JSON.stringify(data));
+
+  res.addTrailers({ 'Server-Timing': `db;dur=${dbTime}` });
+
+  res.end();
+});
+```
+
+Before you get excited and start adding trailers all over the place, you should know that [they aren't well supported by browsers](https://stackoverflow.com/a/48180203/4697675), and likely won't be. Only Firefox supports the `Server-Timing` trailer, and that's the only trailer it supports.
+
+Still, it is kind of cool that HTTP is extensible enough to allow you to do this. Maybe you'll find use for trailers with a custom HTTP client.
+
+## 8. MIME types are more important than you think.
+
+Another crucial set of headers are `Accept` and `Content-Type`. Servers could send any kind of text _or_ binary data, and browsers have no way to know what the data is just by looking at it. `Accept` tells the server what kind of data the client wants and `Content-Type` gives hints to the client for what data to expect. Both of these use MIME types to identify the types of data.
+
+<Aside mode="question" title="What are MIME types?">
+
+MIME actually stands for "Multipurpose Internet Mail Extensions" and were designed to allow emails to include more than just plain text. HTTP adopted MIME types for defining the content type of resources, making them [yet another web naming anachronism](https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest).
+
+</Aside>
+
+Browsers will automatically vary the `Accept` header based on how a resource was requested. When first requesting a resource, the browser will use something like `text/html,*/*;q=0.8`, indicating that its preference is for `text/html` files, but ultimately it will accept any other MIME type with the `*/*` wildcard. A resource requested with an `<img>` tag puts preference on `image/*` and `<link rel="stylesheet">` tags prefer `text/css`. Incidentally, resources referenced in `<script>` tags will just accept `*/*` - I guess browsers are still holding out for supporting non-JavaScript scripting.
+
+`Accept` is also handy if the server is able to serve the same resource with different `Content-Type`s. For example, a REST API could respond with `application/json` for JSON data, `text/xml` for the same data formatted as XML, or `text/html` for a human-readable HTML page.
+
+It's important that the server sends the right `Content-Type` so the client knows how to present the resource. Most modern web servers are smart enough to properly apply the correct MIME type when serving a file, but if the server is generating a file, you'll have to supply the MIME type yourself. IANA is responsible for keeping the [full list of official MIME types](https://www.iana.org/assignments/media-types/media-types.xhtml) if you ever need to send a particular type of data. As a last resort, `application/octet-stream` will cause the browser to download the file as-is.
+
+## 9. HTTP servers and clients don't have to use every HTTP feature.
+
+Like we saw with trailers, there are HTTP features that browsers and servers just don't bother supporting. Some things, like requiring servers to always respond to `GET` and `HEAD` requests, are built into the spec. But just about everything else, including respecting headers, parsing out trailers, and responding with the correct status code, is optional.
+
+It's ultimately up to the web server whether it will respect the headers and methods sent by the client. A classic example is the `DNT`, or "Do Not Track" header, which was introduced in 2009 to prevent websites from tracking users across the internet. Even when the browser sent this header, there was nothing keeping the server from fingerprinting the request and sharing user information with other sites. Because of this, the header was deprecated in 2019.
+
+That doesn't mean you can be lazy when writing an HTTP server. Remember the [Robustness Principle](https://en.wikipedia.org/wiki/Robustness_principle), which says servers should "be conservative in what they send and be liberal in what they accept". Your server should be able to handle anything that's thrown at it, even if "handling it" is sending a `400 Bad Request` and leaving it at that. (Frankly, that's also a good approach to dealing with people when you're in a bad mood.)
+
+But, there are lots of ways you can improve the user experience of folks who work with your server: including helpful response headers, responding with the appropriate status codes, and making sure servers respond in predictable ways to the different HTTP methods.
+
+## 10. HTTP ~~2~~ 3 is the future.
+
+HTTP was a huge step forward for the internet, but it isn't without its flaws. As websites became larger, more resources needed to be downloaded when visiting them. This created a waterfall situation, where the browser first had to download the HTML file, parse it, and then make requests for all of the stylesheets, scripts, and images in the document.
+
+A feature called HTTP Pipelining makes it possible for browsers to make multiple parallel HTTP requests without waiting for each response. This theoretically sped up page load times, but its hard to implement and can cause [head-of-line blocking](https://en.wikipedia.org/wiki/Head-of-line_blocking), when the maximum number of parallel requests is used up and the client has to wait for the former requests to resolve before making any new requests.
+
+HTTP/2 was supposed to fix all of these issues and found great support among browser vendors, server software, and CDNs. It's flagship feature was HTTP push, allowing servers to preemptively send resources to the client without waiting for a request, shortening the network waterfall.
+
+Alas, HTTP/2 is still built on TCP, and some flaws in the design allow for head-of-line blocking when TCP packets are delayed or lost. HTTP push is yet another difficult thing for HTTP servers to implement, and the Chrome team has even [proposed removing it from Chrome](https://groups.google.com/a/chromium.org/g/blink-dev/c/K3rYLvmQUBY/m/vOWBKZGoAQAJ?pli=1) due to low adoption.
+
+The good news is work on HTTP/3 began shortly after HTTP/2. Like mentioned before, it's built on the QUIC protocol, which uses UDP to offer lower latency, higher bandwidth, and no head-of-line blocking.
+
+It also enables other exciting features like [WebTransport](https://web.dev/webtransport/), a bi-directional communication channel between clients and servers. Unlike TCP-based WebSockets, WebTransport has no delivery guarantees, which makes it ideal for real-time media streams and high-frequency data updates.
+
+HTTP/3 was [just standardized](https://twitter.com/programmingart/status/1533908423682756609), already has [great browser support](https://caniuse.com/http3) (Safari requires an experimental flag), and more web servers are adding support over time (although it is still WIP for both Deno and Node).
+
+---
+
+As ubiquitous as it is, HTTP still has some fun surprises. Did you learn anything new? Am I missing something? If so, <TweetLink>let me know</TweetLink>. I'd love to hear from you!
+
+**Edits:**
+
+- Updated the RFC link in the intro to the latest RFC 9110.
+- Improved the explanation of the `Cache-Control` request header.
+- Added a common example of the `409 Conflict` status code.
+- Included more context about the `418 I'm a Teapot` status, which was updated in RFC 9110.

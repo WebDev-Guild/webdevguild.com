@@ -1,0 +1,8 @@
+---
+const { text = '@ralex1993 Nice blog post. Have you thought about... ' } = Astro.props;
+const href = encodeURIComponent(Astro.url.toString());
+---
+
+<a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${href}`}>
+    <slot />
+</a>

@@ -1,0 +1,41 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import PostPreview from '../components/PostPreview.astro';
+import siteConfig from '../data/site-config';
+import { sortPostsByDateDesc } from '../utils/post-utils';
+import Subscribe from '../components/Subscribe.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Icon from '../components/Icon.astro';
+
+const postsPerPage = siteConfig.postsPerPage || 15;
+const blog = (await getCollection('blog')).sort(sortPostsByDateDesc);
+const hasNext = blog.length > postsPerPage;
+const totalPages = Math.ceil(blog.length / postsPerPage);
+---
+
+<BaseLayout description={siteConfig.description} image={siteConfig.image}>
+    <main class="grow px-4 py-12 sm:px-8 sm:py-16">
+        <h1 class="sr-only">Blog</h1>
+        <div class="max-w-3xl xl:max-w-6xl mx-auto">
+            {blog.slice(0, postsPerPage).map((post) => <PostPreview post={post} />)}
+        </div>
+        <nav aria-label="Pagination" class="max-w-3xl mx-auto my-12 pt-12 border-t border-slate-200 sm:my-16 sm:pt-16">
+            <div class="relative text-center px-12">
+                <span class="text-slate-500 text-sm uppercase tracking-wider" aria-current="page">Page 1 of {totalPages}</span>
+                {
+                    hasNext && (
+                        <a
+                            class="w-10 h-10 absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center text-lg bg-slate-50 text-slate-700 rounded-full transition duration-300 hover:bg-primary hover:text-white hover:shadow-button"
+                            href={`/blog/2`}
+                            rel="prefetch"
+                            aria-label={`Go to page 2 of ${totalPages}`}
+                        >
+                            <Icon icon="arrow-right" class="w-5 h-5 fill-current" />
+                        </a>
+                    )
+                }
+            </div>
+        </nav>
+        <Subscribe class="my-12 sm:my-16" />
+    </main>
+</BaseLayout>

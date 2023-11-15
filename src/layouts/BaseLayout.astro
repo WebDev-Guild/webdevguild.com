@@ -1,0 +1,26 @@
+---
+import { ViewTransitions } from 'astro:transitions';
+import BaseHead, { type Props as HeadProps } from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+
+export type Props = HeadProps;
+
+const { ...head } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="antialiased break-words">
+    <head>
+        <BaseHead {...head} />
+        <ViewTransitions />
+    </head>
+    <body class="bg-gray-100 dark:bg-gray-900 font-body text-gray-800 dark:text-gray-100">
+        <div class="fixed z-0 inset-0 pointer-events-none from-gray-100 to-indigo-100 dark:from-gray-900 dark:to-indigo-900 bg-gradient-to-br"></div>
+        <div class="flex flex-col min-h-screen z-10 relative">
+            <Header />
+            <slot />
+            <Footer />
+        </div>
+    </body>
+</html>

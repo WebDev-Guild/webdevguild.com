@@ -1,0 +1,50 @@
+---
+const { content } = Astro.props
+---
+
+<span title={content} tabindex={0} class="tooltip cursor-pointer underline text-pink-500">
+  <slot />
+</span>
+
+<script>
+  import { computePosition, flip, shift } from '@floating-ui/dom';
+  const tooltip = document.getElementById(`tooltip-content`);
+
+  function update(el) {
+    computePosition(el, tooltip, {
+      placement: "bottom",
+      middleware: [flip(), shift({ padding: 5 })],
+
+    }).then(({ x, y }) => {
+      Object.assign(tooltip.style, {
+        left: `${x}px`,
+        top: `${y}px`,
+      });
+    });
+
+    tooltip.innerHTML = el.getAttribute("data-title");
+  }
+
+  function showTooltip(el) {
+    tooltip.style.display = 'block';
+    update(el);
+  }
+
+  function hideTooltip() {
+    tooltip.style.display = '';
+  }
+
+  document.querySelectorAll(".tooltip").forEach(el => {
+    el.setAttribute("data-title", el.getAttribute("title"));
+    el.removeAttribute("title");
+    [
+      ['mouseenter', () => showTooltip(el)],
+      ['mouseleave', () => hideTooltip(el)],
+      ['focus', () => showTooltip(el)],
+      ['blur', () => hideTooltip(el)],
+    ].forEach(([event, listener]) => {
+      el.addEventListener(event, listener);
+
+    });
+  })
+</script>

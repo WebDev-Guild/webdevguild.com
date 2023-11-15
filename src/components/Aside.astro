@@ -1,0 +1,53 @@
+---
+export type Props = {
+  mode?: "info" | "warning" | "question"
+  title?: string;
+}
+
+const { mode = "info", title } = Astro.props
+
+const modeStyles = {
+  info: "border-blue-500 bg-blue-500/20",
+  warning: "border-red-500 bg-red-500/20",
+  question: "border-yellow-500 bg-yellow-500/20"
+}
+const modeIconColor = {
+  info: "text-blue-500",
+  warning: "text-red-500",
+  question: "text-yellow-500"
+}
+
+const modeStyle = modeStyles[mode];
+
+let radius = 16;
+const DEG_TO_RAD = Math.PI / 180
+const circle = Array.from({ length: 46 }).fill(0).map((_, i) => {
+  const x = Math.cos(-1 * i * 2 * DEG_TO_RAD) * radius;
+  const y = Math.sin(i * 2 * DEG_TO_RAD) * radius;
+  return `${x}px ${y}px`
+}).join(', ')
+const path = `polygon(${circle}, 0 100%, 100% 100%, 100% 0)`
+const iconColor = modeIconColor[mode];
+---
+
+<div class="relative aside">
+  <div class={`${iconColor} absolute -left-4 -top-4`}>
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+      stroke-width="2">
+      {mode === "question"?
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      :mode==="info" ?
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      :
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      }
+    </svg>
+  </div>
+  <div class={`border-l-4 ${modeStyle} py-2 px-8 my-8 rounded-r-lg`} style={`clip-path: ${path}; -webkit-clip-path:
+    ${path};`}>
+    {title && <p class="text-xl font-semibold text-black dark:text-white">{title}</p>}
+    <slot />
+  </div>
+</div>

@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --color-primary: 2 147 181; /* #0293B5 */
+    }
+}
+
+.breakout {
+    margin: 1em -100%; /* old browsers fallback */
+    margin: 1em calc(50% - 50vw);
+}
+
+.aside details summary {
+    cursor: pointer;
+    user-select: none;
+}
+
+.aside summary {
+    list-style: none;
+}
+.aside summary::-webkit-details-marker {
+    display: none;
+}
+
+.aside details summary::before {
+    content: '';
+    width: 1rem;
+    height: 1rem;
+    display: inline-block;
+    margin-right: 0.5rem;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="black" d="M7.41 7.84L12 12.42l4.59-4.58L18 9.25l-6 6-6-6z"/></svg>')
+        no-repeat center;
+    --rotation: 0deg;
+    transform: translateY(0) rotate(var(--rotation));
+}
+
+@media (prefers-color-scheme: dark) {
+    .aside details summary::before {
+        background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="white" d="M7.41 7.84L12 12.42l4.59-4.58L18 9.25l-6 6-6-6z"/></svg>')
+            no-repeat center;
+    }
+}
+
+.aside details summary:hover::before {
+    animation: bounce 0.4s ease-in-out alternate;
+}
+/* By using [open] we can define different styles when the disclosure widget is open */
+.aside details[open] summary::before {
+    --rotation: 180deg;
+}
+
+@keyframes bounce {
+    0%,
+    100% {
+        transform: translateY(0) rotate(var(--rotation));
+    }
+    65% {
+        transform: translateY(-0.5em) rotate(var(--rotation));
+    }
+}
+
+del {
+    position: relative;
+    text-decoration: none;
+}
+del:after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 0.2em;
+    min-height: 3px;
+    background: red;
+    margin: auto;
+    transform: rotate(-3deg);
+    inset: 0;
+}
+
+[role='tooltip'] {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    text-align: center;
+    max-width: 30ch;
+    background: #222;
+    color: white;
+    font-weight: bold;
+    padding: 5px;
+    border-radius: 4px;
+    font-size: 90%;
+    pointer-events: none;
+}
