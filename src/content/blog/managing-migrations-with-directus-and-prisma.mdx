@@ -1,0 +1,59 @@
+---
+title: Managing Migrations with Directus with Prisma
+publishDate: Wed Apr 26 2023 01:24:50 GMT-0400 (Eastern Daylight Time)
+excerpt: Directus and Prisma work great together, so long as you can figure out how manage syncing data models between the two.
+featureImage:
+  src: '/assets/blog/managing-migrations-with-directus-and-prisma.jpg'
+---
+
+import Aside from '../../components/Aside.astro';
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+Directus and Prisma are both powerful tools on their own. [Directus](https://directus.io) lets us model and store data with an easy-to-use interface. [Prisma](https://www.prisma.io) works on the other side of our data, with an ORM connected directly to our database for quick and easy access.
+
+It sounds like a match made in heaven, no? But there are a few sharp edges around getting set up and running migrations that you’ll need to smooth out to use them together.
+
+### Why use Prisma with Directus?
+
+Directus can power websites on its own. It includes both a REST and GraphQL API for accessing the data in its collections, and these might be good enough for your website. But if you’re worried about high traffic putting your Directus instance under heavy load, or if you plan to do complicated joins, having direct access to the underlying database is a huge win.
+
+And that’s one of the best features of Directus - it’s only a layer on top of your database, and it leaves you the option of directly accessing your data when the need arises.
+
+<Aside>
+
+Note that you only have direct database access if you are using Directus Enterprise or self-hosting your own Directus instance.
+
+</Aside>
+
+Of course, the benefit of Prisma is how easily it allows you to access your data from within an app.
+
+### Migrations Woes
+
+One of Directus’ most useful features is its ability to directly update your database, adding new fields and tables as needed for your app.
+
+And Prisma has a powerful migration engine which tracks which migrations have run so your database doesn’t go out of sync.
+
+Unfortunately, these two methods for updating your database tables directly conflict with each other. Prisma migrations are so strict that if your Directus and Prisma models go out of sync at all, Prisma will insist that you reset your entire database. Ouch.
+
+On the other hand, Directus is fickle about how all of its tables are set up and organized. The relationships and column types all have to be just right, something that’s hard to do when hand-writing a `prisma.schema` file. One column out of place and Directus refuses to work.
+
+### What Works
+
+In all my testing, I found it was best to let Directus be in charge of changing and editing the schemas, and have Prisma mirror the Directus generated database. Using the [Directus CLI](https://docs.directus.io/self-hosted/cli.html), a new project can be created with `directs bootstrap`. After you’ve created your database models using the Directus app, you can run `directus schema snapshot` to generate a snapshot file, which represents the current state of all of your models. The snapshot it creates can be committed to version control so you can apply it elsewhere with `directus schema apply`.
+
+<Aside>
+
+Of course, this means only using Directus to edit your database models from a development environment, committing them to version control, and applying the schema as part of your production deploy process. To me, that seems much safer than editing production columns and tables willy-nilly.
+
+</Aside>
+
+On the Prisma side, you can sync up your `schema.prisma` simply by running `prisma db pull` and then generate your Prisma client with `prisma generate`. You can still take advantage of Prisma’s database seed feature by running `prisma db seed` after the database has been set up, giving your new Directus instance some structured data to get started with.
+
+Sometimes it might be helpful to write your fields or table names in one way on Directus, but in another way in your app, like using PascalCase for your Directus tables, but snake_case in your app.
+
+[`@@map`](https://www.prisma.io/docs/concepts/components/prisma-client/working-with-prismaclient/use-custom-model-and-field-names#using-map-and-map-to-rename-fields-and-models-in-the-prisma-client-api)[ and ](https://www.prisma.io/docs/concepts/components/prisma-client/working-with-prismaclient/use-custom-model-and-field-names#using-map-and-map-to-rename-fields-and-models-in-the-prisma-client-api)[`@map`](https://www.prisma.io/docs/concepts/components/prisma-client/working-with-prismaclient/use-custom-model-and-field-names#using-map-and-map-to-rename-fields-and-models-in-the-prisma-client-api)[ and relation names](https://www.prisma.io/docs/concepts/components/prisma-client/working-with-prismaclient/use-custom-model-and-field-names#using-map-and-map-to-rename-fields-and-models-in-the-prisma-client-api) are your friend. Like the name implies, Prisma will automatically map the table and column names however you specify, and it will even try to keep those mappings in place when you run `prisma db pull`. If you’re using VS Code with the Prisma extension, it becomes trivially easy when using the `F2` key (the “Rename Symbol” function). Running that automatically adds the appropriate directives to the model or field.
+
+![Using VSCode Rename Symbol to rename a column in the Prisma schema](/assets/blog/rename-column.gif)
+
+Once you’ve got your Prisma schema set up, it should be smooth sailing. Prisma will make sure your data matches the schema Directus expects, so any data you insert from your app will be available and editable as if you created it within Directus.

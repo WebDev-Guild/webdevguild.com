@@ -1,0 +1,314 @@
+---
+title: Embedding Remix in Directus
+publishDate: Mon Oct 16 2023 00:00:00 GMT-0400 (Eastern Daylight Time)
+excerpt: In this mad-science experiment, we combine the Directus CMS with the Remix framework in a single package that enjoys the features of both.
+featureImage:
+  src: '/assets/blog/embedding-remix-in-directus.jpg'
+---
+
+import Aside from '../../components/Aside.astro';
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+Who’s ready for some mad science? 🧑‍🔬
+
+<Aside mode="warning">
+
+After playing with this a bit more, my mad science turned into a monster. This is an incredibly hacky approach, and I don't recommend it. HERE BE DRAGONS! 🐉
+
+</Aside>
+
+[Directus](https://directus.io/) is a self-hosted, all-in-one CMS platform written in JavaScript. You hook it up to some SQL database, build a data model, and it gives you a REST and GraphQL API for getting your data. Plus it manages files, users, roles and permissions, automated workflows, simple analytics dashboards, and all kinds of other stuff. PLUS, if you want you can create extensions to give it even more capabilities!
+
+[Remix](https://remix.run/) is a server-side framework that lets you create dynamic, server-side rendered apps with React and web platform primitives, like FormData, Request, and Response. It’s fast and powerful, but its most valuable feature is how easy it is to add great user experience to a site, like pending UI states, optimistic updates, and smooth error handling.
+
+It’s trivial to use Directus with Remix - just point a [Remix loader](https://remix.run/docs/en/main/route/loader) at your Directus endpoint to get whatever data you need for a route. But you’ll still need to find a place to host two separate apps - one for Remix and one for Directus.
+
+Wouldn’t it be nice if you could run both of them together?
+
+## Peeking Inside Directus
+
+Directus itself is built on top of some pretty common JavaScript libraries, like [Knex](https://knexjs.org/) for building database queries and [Vue](https://vuejs.org/) for building UIs. Incidentally, it also uses [Express](https://expressjs.com/) as its web server.
+
+When you make what’s called an “endpoint extension”, Directus gives you an Express router which you can use to add custom endpoints to your Directus instance.
+
+```javascript
+// An example endpoint extension.
+// You can access it at /greet/intro on your Directus instance
+export default {
+  id: 'greet',
+  handler: (router) => {
+    router.get('/intro', (req, res) => res.send('Nice to meet you.'));
+  }
+};
+```
+
+The Directus examples focus on using endpoint extensions to build local proxies to other services, like Stripe or Twilio. But endpoints don’t just have to be used for APIs. It’s a regular Express router, which means it can return whatever you want.
+
+As it turns out, Remix happens to have an Express adapter, which converts its `req` and `res` into Web API `Request` and `Response` objects for Remix to consume. Handy.
+
+…you see where I’m going with this.
+
+## Mixing Oil and… Different Oil
+
+The plan is to have one repository that includes our Remix app, our Directus instance, and a Directus extension to connect them.
+
+To begin, we’ll create a basic Remix app with the `create-remix` CLI.
+
+```javascript
+npx create-remix@latest
+```
+
+Doesn’t matter what template you use, they should all work.
+
+Next, let's make a new extension for Directus inside our Remix app folder. The purpose of this extension is to serve our static files and call the Remix request handler. We’ll use the handy extension SDK they provide:
+
+```javascript
+npx create-directus-extension@latest
+```
+
+We’ll choose “endpoint” as our extension type and it’ll scaffold a simple extension for us.
+
+By default endpoint extensions make the route start with the name of the extension, but you can override that by passing in an “id” to the endpoint config, which becomes what it uses for the route.
+
+Now you might be wondering “Is Directus going to limit us to only have our app run at some sub-URL?” Funny enough, no. If you pass an empty string for the ID of your endpoint, your endpoint now lives at the top of the route tree and your Remix app can handle any request coming into the server (aside from those specifically handled by Directus, like `/admin` or `/assets`.
+
+<Aside>
+
+I imagine this is an oversight on the part of Directus - an unintended behavior. If they ever patch it so this doesn’t work (which I hope they don’t), you will have to host your Remix app at a specific sub-route. The [`publicPath`](https://remix.run/docs/en/main/file-conventions/remix-config#publicpath) Remix config will be helpful in this case.
+
+</Aside>
+
+First things first, let’s serve our static assets. The `serve-static`is a handy way to do that. It will automatically find our files, apply caching headers, and pass on the request if a file isn’t found. Install it in your extension folder with NPM.
+
+```text
+npm install serve-static
+```
+
+Now add handlers for the `public` and `public/build` folders. For file paths, we’re assuming that Directus is being run from the root of the Remix project, which is how we’ll set it up in a minute.
+
+```javascript
+import { defineEndpoint } from '@directus/extensions-sdk';
+import serveStatic from 'serve-static';
+import * as path from 'node:path';
+
+const __dirname = process.cwd();
+
+const serve = serveStatic(path.resolve(__dirname, 'public'), {
+  maxAge: '1h'
+});
+// Built files have hashed filenames, so they can be cached forever.
+const serveBuild = serveStatic(path.resolve(__dirname, 'public/build'), {
+  maxAge: '1y',
+  immutable: true
+});
+
+export default defineEndpoint({
+  id: '',
+  handler: (router, context) => {
+    router.all('*', (req, res, next) => {
+      // Handling for Directus URLs
+      if (req.url.startsWith('/auth/login') || req.url.startsWith('/admin')) {
+        return next();
+      }
+      serveBuild(req, res, () => {
+        serve(req, res, () => {
+          next();
+        });
+      });
+    });
+  }
+});
+```
+
+<Aside>
+
+There might be better ways to do this than nesting `serve` inside `serveBuild`. Consider this implementation merely for illustrative purposes.
+
+</Aside>
+
+Then we need to create our request handler. We’ll need to import our built Remix server and pass it to the Express request handler. This includes creating a [`getLoadContext`](https://remix.run/docs/en/main/route/loader#context) function, which grabs some data from the `req` object and the Directus context and makes them available to our Remix loaders and actions.
+
+```diff
++ import { createRequestHandler } from "@remix-run/express";
++ import * as url from "node:url";
+import * as path from "node:path";
+// ...
+
++ const BUILD_PATH = path.resolve("./build/index.js");
++ const BUILD_URL = url.pathToFileURL(BUILD_PATH).href;
++ let build = await import(BUILD_URL);
+
++function getLoadContext(context) {
++  return (req: any) => {
++    return {
++      ...context,
++      schema: req.schema,
++      accountability: req.accountability,
++    };
++  };
++}
+
+export default defineEndpoint({
+  id: "",
+  handler:(router, context) => {
++		const request handler = createRequestHandler({
++			build,
++			getLoadContext: getLoadContext(context),
++       });
+		router.all("*", (req, res, next) => {
+	    // Handling for Directus URLs
+	    if (req.url.startsWith("/auth/login") || req.url.startsWith("/admin")) {
+	      return next();
+	    }
+	    serveBuild(req, res, () => {
+	      serve(req, res, () => {
++		    requestHandler(req, res, next);
+	      });
+	    });
+	  });
+  },
+});
+
+```
+
+Congratulations! That’s our entire extension. We could add [a bit more code to handle live reload](https://remix.run/docs/en/main/guides/manual-mode) and file watching in development, but this is all we need at the moment as a minimum viable product.
+
+We will need to get our un-built extension built and into the extensions folder… Except the extensions folder doesn’t exist yet! Directus will create one the first time we start it up. Let’s do that now.
+
+Run `npx directus@latest init` and follow the prompt. If you’re just playing around with this, choose SQLite so you don’t have to set up a separate database. Once that’s done, Directus will create an empty extensions folder and a `.env` file.
+
+Build your extension by running `npm run build` from within the extension folder. Then move the resulting `index.js` file to `/extensions/endpoints/{extension_name}/index.js` so Directus can pick it up.
+
+You can configure where that `index.js` file ends up by adding some config to your extension’s `package.json` file. This should do the trick to automatically put it in our extension folder:
+
+```text
+// package.json
+{
+	"directus:extension": {
+    "type": "endpoint",
+    "path": "../extensions/endpoints/{extension_name}/index.js",
+    "source": "src/index.ts",
+    "host": "^10.1.11"
+  }
+}
+```
+
+We’ll also need to adjust our `.env` file a little bit by adding some things to the top.
+
+```text
+# Where to redirect to when navigating to /. Accepts a relative path, absolute URL, or false to disable ["./admin"]
+ROOT_REDIRECT="false"
+# Required for the Remix app to work
+CONTENT_SECURITY_POLICY_DIRECTIVES__SCRIPT_SRC="array:'self','unsafe-inline','unsafe-eval'"
+```
+
+The first makes it so visiting `/` doesn’t automatically redirect to `/admin`. The second overrides some content security policy directives allowing the browser to execute some `<script>` tags inserted into the page by Remix.
+
+## It Lives!
+
+With that, we can run `npx directus@latest start` and see our app start up. We can know our extension has loaded if it appears in the first startup messages Directus prints, but we know for sure if we visit [`http://localhost:8055/`](http://localhost:8055/) and see our app come to life!
+
+Then we can go to `https://localhost:8055/login` and log in to Directus to see the data studio. Nifty!
+
+So what does this do for us? For starters, we get direct access to our Directus database and file store without having to jump through a bunch of extra hoops. For example, fetching a blog post looks like this:
+
+```javascript
+// /app/routes/post.$slug.tsx
+export async function loader({context, params}) {
+  const itemsService = new context.services.ItemsService("posts", {
+    schema: context.schema as any,
+    accountability: { admin: true, role: "" },
+  });
+
+	const [post] = await itemsService.readByQuery({
+    limit: 1,
+    filter: { slug: { _eq: params.slug }, status: { _eq: "published" } },
+    fields: ["*"],
+  });
+
+  if (!post)
+    throw new Response(null, {
+      status: 404,
+      statusText: "Not Found",
+    });
+
+  return { post };
+}
+```
+
+This will save a tiny bit of time since our Remix app doesn’t have to send an HTTP request to get the data — it’s connected straight to the database through Directus.
+
+<Aside>
+
+If we wanted, we could also directly access the Knex instance with `context.database`, or any of the other tools that Directus provides through the context.
+
+</Aside>
+
+How about loading images? We just point our image tags at `/assets/{image_id}` and Directus serves the image, regardless of where it’s stored (did you know Directus lets you [configure any number of image storage providers](https://docs.directus.io/self-hosted/config-options.html#file-storage), including any S3-compatible provider? Nifty!) Directus even has rudimentary image transformation built-in, so you can make sure each image is correctly sized and is in the right format so your pages load fast and you don’t have cumulative layout shift issues.
+
+How about authentication? Using [`remix-auth`](https://github.com/sergiodxa/remix-auth)'s Form strategy and the Directus Authentication service, we can easily check an email and password against the Directus database.
+
+```javascript
+// This is the authenticator from remix-auth
+authenticator.use(
+  new FormStrategy(async ({ form, context }) => {
+    let email = form.get('email')?.toString().toLowerCase();
+    let password = form.get('password');
+
+    const authService = new context.services.AuthenticationService({
+      schema: context.schema,
+      accountability: { admin: true, role: '' }
+    });
+    const usersService = new context.services.UsersService({
+      schema: context.schema,
+      accountability: { admin: true, role: '' }
+    });
+
+    const auth = await authService.login(undefined, { email, password });
+    if (!auth) throw new Error('Invalid email or password');
+
+    // Login was successful, find the user.
+    const [user] = await usersService.readByQuery({
+      filter: {
+        email: { _eq: email }
+      }
+    });
+    if (!user) throw new Error('Invalid email or password');
+    return {
+      id: user.id,
+      email: user.email,
+      avatar_url: user.avatar ? `/assets/${user.avatar}` : undefined
+    };
+  }),
+  'directus'
+);
+```
+
+What about authorization? Directus already has a robust role-based access control system that we can take advantage of, using the Data Studio to create roles and assign them to users, and then checking the user’s assigned role.
+
+All of this, plus the awesome Data Studio, plus everything Remix provides (great error handling, streaming responses, nested routes, etc.), all in one nice little package.
+
+## What’s the Catch?
+
+This might seem too good to be true, and you’d be right. There are definitely sharp edges here. I already mentioned how this takes advantage of a loophole in the endpoint extension API, which might be patched someday.
+
+Also, the dev and build pipeline is a little clunky, since you have to run three processes to get everything up and running.
+
+Another thing to consider: Directus only works with SQL databases and Node.js hosts, so don’t try deploying this to Cloudflare or something. Long-running servers only. Though it works great in hosts that support Docker or Nixpacks.
+
+Directus does support horizontal scaling, and it should work just fine with this setup, but I’ve not confirmed it so _caveat emptor._
+
+Finally, one disappointing aspect of Directus is that it doesn’t seem to support image CDNs, which means it’s serving every image from itself. That’s not terrible for small sites that don’t have to load instantly, but you’ll probably want to put it in front of a cloud CDN. Or better yet, create a little proxy route within Remix that automatically caches images to an image CDN when they’re first requested, and then pulls from the image CDN from that point on. There’s lots of opportunity here!
+
+## Where Do I Sign Up?
+
+If you want a pre-built template that includes all of this, [check out this example repo](https://github.com/alexanderson1993/examples/tree/directus-extension/directus-extension). Or you can just run this command:
+
+```javascript
+npx create-remix@latest ./my-app --template https://github.com/alexanderson1993/examples/tree/directus-extension/directus-extension
+```
+
+That repo includes all of the instructions, along with all the niceties you’d expect from a Remix app, like hot reloading and TypeScript.
+
+Enjoy your new favorite hackathon stack!

@@ -1,0 +1,245 @@
+---
+title: Why we ditched GraphQL for tRPC
+publishDate: Tue Nov 08 2022 00:00:00 GMT-0500 (Eastern Standard Time)
+excerpt: While we normally use GraphQL to get data from the server to the client, tRPC provides a simpler, more streamlined experience for our developers, helping us make better apps for clients.
+featureImage:
+  src: '/assets/blog/why-we-ditched-graphql-for-trpc.jpg'
+  alt: 'The magic globe'
+---
+
+import Aside from '../../components/Aside.astro';
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+At Echobind, we’re committed to building the best software we can for our clients. As we choose our technology stack, we have to balance a number of tradeoffs, including stability, flexibility, scalability, and the speed of development. We wrap our favorite tools in a starter repository we call [Bison](https://github.com/echobind/bisonapp).
+
+We adopted GraphQL in Bison to give our apps end-to-end type checking, with type safety from the database all the way to the UI. It’s served us well, and has been the API layer for dozens of apps developed by Echobind.
+
+We’re always looking for ways to improve our processes, so when we noticed [tRPC](https://trpc.io) starting to become popular, we decided we would take a look. What we saw impressed us, so we’ve decided to adopt tRPC as the official API layer for Bison.
+
+### What is tRPC?
+
+tRPC and GraphQL serve the same purpose: Getting data from the server to the client. GraphQL is a specification which allows the client to request specific data, which the server resolves into a response with just the fields that were requested.
+
+tRPC, on the other hand, lets the client call server-defined procedures, passing along any relevant inputs and getting back a response. Inputs are type checked at runtime using validator libraries like [Zod](https://github.com/colinhacks/zod), and the types of the procedures are inferred from the server to the client. While you can make direct `fetch` calls to tRPC’s API, it includes a wrapper around [React Query](https://tanstack.com/query/v4/), a caching layer that provides an excellent user and developer experience.
+
+Both GraphQL and tRPC are perfectly compatible with React and React Native and have first-party client-side library support. Both support end-to-end type checking, with GraphQL requiring a codegen step. And both are fast enough for our purposes.
+
+Here’s what that looks like in practice, with mostly equivalent examples for both GraphQL and tRPC. First, let's look at GraphQL, both defining the resolver and fetching on the client (excluding any generated code):
+
+```typescript
+// On the server
+export const User = objectType({
+  name: 'User',
+  description: 'A User',
+  definition(t) {
+    t.nonNull.id('id');
+    t.nonNull.date('createdAt');
+    t.nonNull.date('updatedAt');
+    t.nonNull.list.nonNull.field('roles', { type: 'Role' });
+
+    // Show email as null for unauthorized users
+    t.string('email', {
+      resolve: (profile, _args, ctx) => (canAccess(profile, ctx) ? profile.email : null)
+    });
+  }
+});
+
+export const UserRole = enumType({
+  name: 'Role',
+  members: Object.values(Role)
+});
+
+export const UserWhereUniqueInput = inputObjectType({
+  name: 'UserWhereUniqueInput',
+  description: 'Input to find users based on unique fields',
+  definition(t) {
+    t.id('id');
+    t.string('email');
+  }
+});
+
+export const findUniqueUserQuery = queryField('user', {
+  type: 'User',
+  args: {
+    where: nonNull(arg({ type: 'UserWhereUniqueInput' }))
+  },
+  resolve: async (_root, args, ctx) => {
+    return await ctx.db.user.findUnique({ where: prismaArgObject(args.where) });
+  }
+});
+
+// On the client
+export const QUERY = gql`
+  query User($id: ID!) {
+    user(id: $id) {
+      name
+    }
+  }
+`;
+
+export const UserCell = ({ userId }: { userId: string }) => {
+  const { data, loading, error } = useUserQuery({
+    variables: {
+      where: { id: userId }
+    }
+  });
+
+  // ...
+};
+```
+
+And then the same, but using tRPC instead:
+
+```typescript
+// On the server
+export const defaultUserSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  email: true,
+  createdAt: true,
+  updatedAt: true,
+  roles: true,
+  profile: { select: { firstName: true, lastName: true } }
+});
+
+export const userRouter = t.router({
+  find: t.procedure
+    .input(
+      z.object({
+        id: z.string().optional(),
+        email: z.string().optional()
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.db.user.findUniqueOrThrow({
+        where: input,
+        select: defaultUserSelect
+      });
+
+      if (!isAdmin(ctx.user) && user.id !== ctx.user?.id) {
+        return { ...user, email: null };
+      }
+
+      return user;
+    })
+});
+
+// On the client
+export const UserCell = ({ userId }: { userId: string }) => {
+  const { data, loading, error } = trpc.user.find.useQuery({ id: userId });
+
+  // ...
+};
+```
+
+The difference between these two examples highlights the initial reason we switched from GraphQL to tRPC.
+
+### Less Boilerplate
+
+You’ll notice in the code samples above, tRPC is able to do the same work with much fewer lines of code. In fact, when we migrated Bison to tRPC, we added 1,765 lines of code while *removing* 3,373 - a net change of 1,608 lines of code!
+
+This is partially because GraphQL famously has the [“Double declaration problem”](https://wundergraph.com/blog/solving_the_double_quintuple_declaration_problem_in_graphql_applications_how_to_not_repeat_yourself) - there’s a lot of repeating yourself, especially if you’re using TypeScript. Tools like GraphQL codegen help with this, but it’s still a _lot_.
+
+1. Define the database schema (Prisma)
+2. Define the API schema (Nexus)
+3. Write a GraphQL Operation (gql)
+4. Define the response type definition (GraphQL codegen)
+5. Define the query (Apollo Client)
+
+tRPC trims this down significantly.
+
+1. Define the database schema (Prisma)
+2. Define the procedure (tRPC router)
+3. Define the query (tRPC client/React Query)
+
+The simplicity speaks for itself.
+
+### Avoiding Code Generation
+
+In both cases, we can achieve end-to-end type safety, which is table-stakes for our apps, but the method of achieving this type safety is much more complicated with GraphQL, requiring three layers of code-generation:
+
+- [Prisma](https://www.prisma.io) generates types from our database schema.
+- [Nexus](https://nexusjs.org) generates types from our database schema.
+- [GraphQL Codegen](https://www.the-guild.dev/graphql/codegen) generates frontend types and React hooks from our GraphQL request definitions.
+
+This code generation doesn’t come without its consequences. For one app we built at Echobind, Nexus generates a 2000 line type file while GraphQL codegen generates an 8200 _dense_ type file. All of that takes a long time for the type checker to parse and check, both when running `tsc` and in VSCode. We often need to restart our VSCode language server because it gets bogged down with all of the type checking it has to do.
+
+tRPC instead relies on one very large assumption: Your server is written in TypeScript, and is colocated with the client code. tRPC has you define a server-side router for your procedures, then export the type of that which Typescript automatically infers, and then import that type to be used on the client-side. Since types are automatically removed when Typescript code is compiled, there is no extra code added to the client bundle, and no extra types to slow down the type checker. Just type safety.
+
+### Client Bundle Size
+
+It’s no secret - the less JavaScript you ship to your users, the better their experience will be. To build great software, you need _some_ JavaScript, but if an alternative comes along that uses _less_ JavaScript, it’s worth a second look.
+
+Let’s compare the client-side dependencies needed for both approaches. These numbers were calculated by putting the packages through [bundlephobia.com](http://bundlephobia.com) and tracking the “minified + gzip” sizes.
+
+| **GraphQL**                 | **tRPC**                      |
+| --------------------------- | ----------------------------- |
+| @apollo/client: 40kb        | @trpc/client: 4.4kb           |
+| apollo-upload-client: 1.5kb | @trpc/react-query: 1.8kb      |
+| graphql: 39.7kb             | @tanstack/react-query: 12.7kb |
+|                             | @trpc/next: 4.8kb             |
+| **TOTAL: 81.2kb**           | **TOTAL: 23.7kb**             |
+
+The GraphQL bundle is almost 3.5 times the size of tRPC, which means that much more loading time for sites that use it.
+
+<Aside>
+
+As an aside, we could still get the bundle size savings while using GraphQL by combining React Query with a GraphQL request library like the conveniently-named `graphql-request` (7.9kb).
+
+</Aside>
+
+### React Query & Cache Management
+
+A frequent bug we’ve run into building with Apollo Client has to do with updating the cache after a mutation. If you create your queries right, and if your mutations return the correct data, mutations are supposed to automatically update its fancy normalized cache. But that’s rarely how it works out in practice.
+
+This could be a classic case of “you’re holding it wrong”, except it’s not clear what the correct solution is. Do we need to use `refetchQueries`? That gets kind of messy depending on which variables are being used for the query. Maybe we should use `writeQuery` or `writeFragment`? That has the same pitfalls, plus we have to write a bunch of extra code to surgically alter the cache. It shouldn’t be this hard to keep the cache up to date after a request.
+
+It’s impossible to overstate how many nice things React Query provides out of the box. Compared to Apollo Client’s incredibly complicated normalized cache, React Query is a walk in the park. tRPC simplifies it further by keying the cache entries to each procedure. Triggering a refetch is as easy as running `utils.user.find.invalidate({ id: user.id })`.
+
+Along with it comes easy mutation handling, simple patterns for optimistic updates (along with rollbacks in case there are errors), and heuristics for automatically refetching data so it stays fresh. Combined with tRPC’s type safety, React Query is the most delightful way to fetch data on the client.
+
+### IDE Improvements
+
+The methods tRPC 10 uses for type checking have some surprising and convenient side effects. Since the frontend queries are type checked based on the backend procedures, VS Code’s “Go To Definition” feature works _across the network boundary_. I can click on a procedure definition in a client-side file and it will take me right to where that procedure is defined on the server-side.
+
+It gets better. Not only can we jump to the file, if we use VS Codes “Rename All Instances” on an input or procedure name, those changes also propagate between the server and client.
+
+Even with the fancy GraphQL codegen, this just isn’t possible with the way GraphQL works. Having these tools right in the IDE is a huge win for convenience and productivity.
+
+## What did we lose?
+
+Very rarely does a major change like this not have downsides, and leaving GraphQL is no exception. As we’ve made the jump, there are a handful of things GraphQL provided for free that require a bit more effort using tRPC.
+
+### Field Requests
+
+The most obvious is that the client doesn’t get to pick which fields it fetches, whereas GraphQL allows the client to define exactly the fields it wants for any request. There are two workarounds.
+
+First, a tRPC procedure could be defined with an input where the client can request certain fields. This might take a bit of finagling to get the input and output types to line up, but would provide a similar experience to GraphQL.
+
+However, I think a better option is to embrace the simplicity of having the client accept whatever the server returns. In my experience, over-fetching is not as big of a problem as many people make it out to be. If there is a particular procedure that returns far too much or not enough data, there’s nothing wrong with creating a second procedure that returns data more closely scoped to what the client needs.
+
+### Field Resolvers
+
+Another huge benefit of GraphQL is the ability to create custom resolvers on a field-by-field basis. The default is to just pass through whatever value the parent resolver provided for that field, but GraphQL makes it really easy to combine and transform fields, even using arguments from the request as part of the transformation. Common examples include a virtual `fullName` field which combines the `firstName` and `lastName` fields, or a `date` field which lets the user choose what format they want for the date.
+
+This is another case where tRPC can get around the limitation either by using an input or creating a new procedure to provide the transformed data. Probably my biggest lesson in using tRPC: Creating a new procedure is cheap. So long as they are named well, having many procedures is not a bad thing.
+
+### Introspection and Documentation
+
+GraphQL is famous for its self-documenting API. As part of the spec, GraphQL servers can publish an introspection query, which lets anyone see what objects, queries, and mutations the server supports. It’s great for visibility and learning what the API supports.
+
+tRPC has no such introspection query. In fact, it isn’t great for creating a public facing API. The types themselves work great for building first-party apps, but if you want to open your API up to third parties, you’ll have to create your own documentation.
+
+There is an [OpenAPI Extension](https://github.com/jlalmes/trpc-openapi) for tRPC that can be used to create a more REST-like API from your procedures, and that in turn can be used for auto-generating documentation. But if my app needed to offer third-party API access, I would likely reach for GraphQL again.
+
+### Colocated TypeScript Only
+
+One of the best things about GraphQL is that it isn’t actually a technology, it’s just a specification. That means anyone can create a GraphQL server or in any language. So long as it matches the spec, it will work across whatever platform it's used on, whether it be Ruby, JavaScript, Elixir, or Python. That’s part of the reason GraphQL codegen is so valuable. It allows schema definitions and types to be generated regardless of the backend that hosts the GraphQL server.
+
+The same can’t be said for tRPC. Its type checking only works if the server is written in TypeScript, since the client needs those TypeScript types to enjoy its type safety. It’s possible in the future that servers that implement the tRPC HTTP spec could be written in other languages, but they would require a codegen process to make the proper types available to the client.
+
+And, if your tRPC server is located in a different repository, you’ll have to figure out a way to get the generated types into your client app to enjoy the type safety. tRPC works best when the client and server are either part of the same app, like with Next.js, or part of a monorepo.
+
+## Conclusion
+
+tRPC has proven to be exactly the tool that Echobind needs for building our client’s apps. GraphQL may be powerful and capable, but the boilerplate and complexity it requires often slows us down and makes it difficult to build robust, responsive sites. With tRPC, we hope to double down on our commitment to building the best possible software we can for ourselves and our clients.

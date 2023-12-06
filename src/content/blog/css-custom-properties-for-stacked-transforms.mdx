@@ -1,0 +1,133 @@
+---
+title: CSS Custom Properties for Stacked Transforms
+publishDate: Wed Sep 14 2022 18:04:38 GMT-0400 (Eastern Daylight Time)
+excerpt: The power that CSS Transforms provide is undeniable. Stacking CSS transforms lets you choose the order that the transforms are applied.
+featureImage:
+  src: '/assets/blog/css-custom-properties-for-stacked-transforms.jpg'
+  alt: 'Ferris wheel at a fair'
+---
+
+import Aside from '../../components/Aside.astro';
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+<Aside title="tl;dr">
+
+- Use the transform properties, like `rotate` or `translate` to apply transformations.
+- Combine CSS custom properties for each transformation to apply stacked transforms from different selectors
+
+</Aside>
+
+## Stacked Transforms
+
+The power that CSS Transforms provide is undeniable, but it comes at a cost. Anyone who’s ever tried to combine transformations using multiple selectors will tell you - it’s not as easy as you’d think.
+
+Take a look at this
+
+```css
+.box {
+  width: 50px;
+  height: 50px;
+  background-color: rebeccapurple;
+}
+.rotate {
+  transform: rotate(45deg);
+}
+.translate {
+  transform: translate(100px, 0px);
+}
+```
+
+Suppose you were to use them with this HTML element: `<div class="box translate rotate"></div>`. What do you think the result would be?
+
+Since the `.translate` class is below the `.rotate` class in the CSS file, the styles override, and the `translate` property isn’t combined. The end result is a box that is translated 100px to the right. The rotation is completely ignored.
+
+Fortunately, new properties have been [added to most browsers](https://caniuse.com/mdn-css_properties_translate) which allows each transform to be applied separately.
+
+```css
+.rotate {
+  rotate: 45deg;
+}
+.translate {
+  translate: 100px 0px;
+}
+```
+
+This neatly solves that problem, but it introduces another one.
+
+### Applying Multiple Transformations
+
+It’s not obvious, but applying multiple transformations with the `transform` property actually _stacks_ the transformations. If you apply a `rotate` before a `translate`, the element will actually translate based on the rotation that was previously applied. The same thing goes for a `scale` translation - it multiplies any `translate` transforms by however much the element was scaled.
+
+<iframe
+  height="300"
+  style="width: 100%;"
+  scrolling="no"
+  title="Transformation Stacking"
+  src="https://codepen.io/alexanderson1993/embed/preview/VwXrBOM?default-tab=css%2Cresult&editable=true"
+  frameborder="no"
+  loading="lazy"
+  allowtransparency="true"
+  allowfullscreen="true"
+>
+  See the Pen <a href="https://codepen.io/alexanderson1993/pen/VwXrBOM">Transformation Stacking</a> by Alex (
+  <a href="https://codepen.io/alexanderson1993">@alexanderson1993</a>) on <a href="https://codepen.io">CodePen</a>.
+</iframe>
+
+The separate `rotate`, `scale`, and `transform` CSS properties apply their transforms atomically, without considering other transforms which might have been applied. In other words, the separate transform properties do _not_ stack.
+
+Sometimes stacking transforms is exactly the behavior you want, but you once again run into the problem of combining transforms from different selectors. To solve that, we need to be a little tricky.
+
+### Custom Property Transforms
+
+Using CSS Custom Properties, we can create selectors which let us change individual transform properties without overriding the entire `transform`. We create a separate CSS Custom Property for each transform property we want to change, and then combine them all in a single `.transform` class. Here’s what that looks like.
+
+```css
+.transform {
+  --translate-x: 0;
+  --translate-y: 0;
+  --rotate: 0;
+  --scale-x: 1;
+  --scale-y: 1;
+  transform: translateX(var(--translate-x)) translateY(var(--translate-y)) rotate(var(--rotate)) scaleX(var(--scale-x)) scaleY(var(--scale-y));
+}
+.rotate-45 {
+  --rotate: 45deg;
+}
+.translate-x-100 {
+  --translate-x: 100px;
+}
+```
+
+Then we can apply our classes like this: `<div class="box transform rotate-45 translate-x-100">`.
+
+<Aside>
+
+If this looks a lot like atomic CSS libraries, [like Tailwind](https://tailwindcss.com), you’d be right! This is exactly the technique Tailwind uses to apply transforms.
+
+</Aside>
+
+This doesn’t give us much flexibility for stacking our transforms, though. It only lets us apply translates, then rotations, then scales. Fortunately, creating separate classes that alter the order is trivial at this point.
+
+```css
+.transform-rotate-first {
+  transform: rotate(var(--rotate)) translateX(var(--translate-x)) translateY(var(--translate-y)) scaleX(var(--scale-x)) scaleY(var(--scale-y));
+}
+```
+
+Adding that class to our element would make it rotate first, then translate the element using whatever angle it was rotated to.
+
+<iframe
+  height="300"
+  style="width: 100%;"
+  scrolling="no"
+  title="Transformation Classes"
+  src="https://codepen.io/alexanderson1993/embed/preview/ExEbepw?default-tab=css%2Cresult&editable=true"
+  frameborder="no"
+  loading="lazy"
+  allowtransparency="true"
+  allowfullscreen="true"
+>
+  See the Pen <a href="https://codepen.io/alexanderson1993/pen/ExEbepw">Transformation Classes</a> by Alex (
+  <a href="https://codepen.io/alexanderson1993">@alexanderson1993</a>) on <a href="https://codepen.io">CodePen</a>.
+</iframe>

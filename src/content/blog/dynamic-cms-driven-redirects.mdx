@@ -1,0 +1,163 @@
+---
+title: Dynamic CMS-driven Redirects with Next.js
+publishDate: Thu Sep 22 2022 00:00:00 GMT-0400 (Eastern Daylight Time)
+excerpt: Redirects send a request for one page to another page, and are crucial for maintaining good SEO. We can manage these with our own Next.js app and any CMS.
+featureImage:
+  src: '/assets/blog/dynamic-cms-driven-redirects.jpg'
+  alt: 'a blue and white street sign'
+---
+
+import Aside from '../../components/Aside.astro'
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+Despite our best efforts, websites change all the time. Content from multiple pages might be combined into one, or maybe the title of a page has changed, causing the URL to change with it. But what happens to the links to these pages on other websites? Redirects are the solution built right into the foundations of the web.
+
+[An HTTP redirect](https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections) simply takes an incoming request to the _source_ URL and tells the web browser to request the _destination_ page instead. Redirects are essential for maintaining search engine optimization and making sure that outside visitors coming to your website aren’t greeted with a 404 page.
+
+The trick is how to tell your server what sources to go what destinations and making sure these run on every request.
+
+### Storing Redirects
+
+We could just have a static list of redirects in code, but that makes it so only developers can update those redirects. Often it’s content creators or marketers without programming experience who make these changes.
+
+Instead, we’ll store our redirects in a content management system. There are literally _dozens_ of CMS tools out there, including Wordpress, Sanity.io, StoryBlok and Contentful. The key feature you need is the ability to modify the schema to support custom collections and fields. For today, I’ll be using [Directus](https://directus.io).
+
+First, we’ll create a collection called `Redirects`. We only need three columns: `source`, `destination`, and `permanent`.
+
+![Setting up the redirect](/assets/blog/next-redirect-1.jpg)
+
+Then we can use the CMS to add whatever redirect records we may need.
+
+Finally, we need to query our CMS to get all of the redirect records. Directus automatically generates a REST and GraphQL API for any collections you create. Here’s the GraphQL query that we’ll use to get our redirects.
+
+```graphql
+query Redirects {
+  Redirects {
+    source
+    destination
+    permanent
+  }
+}
+```
+
+Your CMS might be different, but all of them have some way to get the data out, whether it be an HTTP API or an SDK of some kind. I’ll leave it as an exercise to the reader to figure out how that works in your particular circumstances.
+
+<Aside>
+
+For some CMSs, you might need to adjust the permissions or use an API token to access the data in your Redirects collection. I chose to make the Redirects collection publicly accessible, but you might want to restrict it.
+
+</Aside>
+
+Now that our redirects are stored and we have a way to get them, we need to teach our server how to apply them to requests.
+
+### Serving Redirects
+
+If we were using a traditional server-side framework like Express, Fastify, or Koa, we could run middleware on every request that checks the URL and sends the redirect response if needed.
+
+```javascript
+const redirects = [];
+
+function redirectMiddleware(req, res, next) {
+  const pathname = new URL(req.url).pathname;
+
+  const redirect = redirects.find((item) => item.source === pathname);
+
+  if (redirect) {
+    const statusCode = redirect.permanent ? 308 : 307;
+    return res.set('Location', redirect.destination).status(statusCode).send();
+  }
+
+  return next();
+}
+
+// ...
+
+app.use(redirectMiddleware);
+```
+
+<Aside>
+
+It is possible to further optimize this code for performance and capability, perhaps by transforming our list into a map keyed by the source, but for our purposes this works just fine.
+
+</Aside>
+
+That’s great for a dedicated server, but lots of apps these days are built with Next.js. While it does have support for [being embedded in a custom server](https://nextjs.org/docs/advanced-features/custom-server), Next.js is much happier being served from serverless functions. How can we ensure our redirects are checked on every page?
+
+### Next.js Middleware Redirects
+
+Middleware has been stable since Next.js 12.2. This allows you to write a lightweight function which is run before every request. If you deploy your site on a fancy hosting platform like Vercel or Netlify, they’ll even run your middleware _on the edge_, which means close to your users. This makes middleware an excellent choice for running fast, simple checks as users browse your website.
+
+This example comes straight from the [Next.js Middleware documentation](https://nextjs.org/docs/advanced-features/middleware). It shows how you can hard-code redirects, or even use in-code logic, to redirect users.
+
+```graphql
+// middleware.ts
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+// /about-2 is the destination
+export function middleware(request: NextRequest) {
+  return NextResponse.redirect(new URL('/about-2', request.url))
+}
+
+// /about/:path* is the source
+export const config = {
+  matcher: '/about/:path*',
+}
+```
+
+Notice that `matcher` at the bottom? This is the `source` that we’ll be redirecting the user from. It tells Next.js to only run the middleware when the user visits a page that matches one of the matchers.
+
+You see, middleware might be fast, but it still adds time to the request. If it runs on every request it’s going to slow down every request. This is especially true if we’re making a request to our CMS every time a user visits a page. And we can’t dynamically set the matcher values — Next.js requires that those are static strings. No variables allowed.
+
+Middleware is still great when you need to redirect based on complicated logic involving headers, cookies, or other factors. But it’s going to be a bit too slow to use on every single page.
+
+Fortunately, Next.js has _another_ feature which has been around even longer than Middleware. It might not be as powerful as Middleware, but it’ll work great for our purposes.
+
+### [Next.js Redirects](https://nextjs.org/docs/api-reference/next.config.js/redirects)
+
+Static redirects have been around since Next.js 9.5 and can be configured in `next.config.js` using an async function. That function returns a list of objects with `source`, `destination`, and `permanent` — exactly what we’re storing in our CMS.
+
+When the Next.js app is compiled, it will call the `redirects` function to create a static list of redirects. Then, for every request, it will quickly check the request URL against the redirect list and send the user to the right page.
+
+This _does_ mean we’ll need to rebuild our app any time the redirects list changes, but that likely won’t happen often, and most CMSs allow you to automatically call a webhook whenever a record is added or changed. We can call a URL provided by our hosting platform to trigger a new build. Here’s what that looks like using Directus Flows.
+
+![Setting up the flow](/assets/blog/next-redirect-2.jpg)
+
+And what about the code? The way we set up our collection means the data is already in the shape Next.js expects. We just make the request and put it in the list of redirects.
+
+```javascript
+// next.config.js
+const { default: request, gql } = require('graphql-request');
+
+async function redirects() {
+  let cmsRedirects = [];
+  try {
+    const results = await request(
+      `${process.env.NEXT_PUBLIC_DIRECTUS_URL}/graphql`,
+      gql`
+        query Redirects {
+          Redirects {
+            source
+            destination
+            permanent
+          }
+        }
+      `
+    );
+
+    cmsRedirects = results.Redirects;
+  } catch (err) {
+    console.error('Error getting CMS redirects:', err.message);
+  }
+
+  return cmsRedirects;
+}
+
+module.exports = {
+  redirects
+  // ... more config here
+};
+```
+
+Add a redirect to the collection, deploy this to your hosting platform, and you should see any requests to the `source` bring you to the `destination` page. Excellent!

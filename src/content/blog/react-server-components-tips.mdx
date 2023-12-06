@@ -1,0 +1,143 @@
+---
+title: React Server Components Tips
+publishDate: Mon Jul 17 2023 00:00:00 GMT-0400 (Eastern Daylight Time)
+excerpt: React Server Components change the mental model for building apps in React. Use these tips to unlock their powerful capabilities.
+featureImage:
+  src: '/assets/blog/react-server-components-tips.jpg'
+---
+
+import Aside from '../../components/Aside.astro';
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+It’s here - the official data fetching solution for React is React Server Components. They do come with a bunch of caveats:
+
+- RSC requires deep bundler integration, so you’re best off using a framework like Next.js.
+- RSC enforces strict component tree structures and module composition.
+- When using RSC, any interactive code must be done in a special client component.
+
+But they come with a bunch of benefits too:
+
+- You can fetch data inside your components, and it Just Works™.
+- You can avoid data fetching waterfalls that are common with client-side fetching.
+- You can stream data using `<Suspense>` to speed up the initial page load.
+- You can execute more code on the server without shipping it to the client, keeping bundle sizes smaller.
+
+On the whole, I think RSC is worth it, but it does come with a new mental model. If you’re just getting started with them, here are some tips to help you build apps with RSC.
+
+<Aside>
+
+As of writing, the only React Server Components implementation with any degree of adoption is Next.js App Router, which has its own conventions on top of Server Components. That said, this guide should still be applicable to any eventual Server Components implementation.
+
+</Aside>
+
+## Tip 1: Make More Components
+
+In the past, there weren’t really guidelines on how much stuff to put inside a component. Since it’s all “Just JavaScript”, and calling components is kinda like calling functions, you could put as many `<div>`, `data.map()`, and whatever else you want inside a component. React doesn’t care.
+
+Except now it does. First you used `React.lazy` to separate components for code splitting. Now with RSC, client components have to be split out, not just into their own component but their own _file_. Any streaming data needs to be split into its own component and wrapped in `<Suspense>`.
+
+Don’t resist. Don’t try to build everything in one component, or even in one file. As soon as you get an inkling that some markup or logic should be in its own component, don’t hesitate - just split it out
+
+## Tip 2: Use Client Components Freely
+
+There’s a good deal of moaning over the fact that a lot of existing React libraries don’t work in RSC anymore. And while it’s true that they _can’t_ work in a server component, that doesn’t mean you can’t use them in a client component. After all, once you cross the `"use client"` barrier, it’s as if you weren’t using server components at all. And you can still render those client components inside server components and pass props to them.
+
+Take React Query for example. The [official docs](https://tanstack.com/query/latest/docs/react/guides/ssr#using-the-app-directory-in-nextjs-13) even demonstrate a pattern where you create your query client in a client component and then render that at the top level of your server component, so the query context is available to the whole app. And while [you might not need React Query](https://tkdodo.eu/blog/you-might-not-need-react-query) or those other libraries with React Server Components, there’s nothing stopping you from using them just like you always have.
+
+If you need interactivity, like event handlers, `useState`, `useRef`, or `useEffect`, don’t hesitate to break that component into its own file, and add `"use client"` to the top.
+
+It is worth noting, though, that any component rendered inside the client component (eg. not passed in the children prop) will also be considered a client component, so not every client component needs `"use client"`. You can think of `"use client"` as an explicit boundary between server components and client components, the place where the components transition between the data fetching world and the interactive world.
+
+<Aside>
+
+Another misconception about client components is that they can still be server-side rendered, just like pre-RSC components. Think of RSC + SSR in four phases: Render the RSCs, SSR the entire React app, send the app to the browser, hydrate the app. Using RSCs in your app only adds the first step; the other three are present in any SSR'd React app.
+
+</Aside>
+
+But if you still need to do data fetching inside those client components, you’ll need to be thoughtful about how your components compose.
+
+## Tip 3: Build Components for Composition
+
+![React Server Components Diagram](/assets/blog/react-server-components.jpg)
+
+This kind of diagram has been around ever since React Server Components were first announced at the end of 2020, but it’s incredibly misleading. It implies that client components can render server components and vice versa. In reality, only server components can render other server components; client components can’t.
+
+And that makes sense. Once a client component is rendered on the client, how does it execute that server code? Is the client magically able to make calls to the database? No, that’s silly. One of the immutable rules of RSC is that client components can’t render server components.
+
+But there is a literal loophole in this: Using component composition, you can render a server component _on the server,_ but as a child of a client component. Just like you can pass server-fetched data as props from a server component to a client component, you can pass rendered server components _as props_ to client components too.
+
+Here’s a trivial example:
+
+```javascript
+'use client';
+
+export function LoaderButton({ children }) {
+  const formStatus = useFormStatus();
+
+  return (
+    <Button type="submit" variant="secondary">
+      {formStatus?.pending ? <LoaderIcon className="animate-spin" /> : children}
+    </Button>
+  );
+}
+```
+
+<Aside>
+
+Note that I am using server actions hooks and patterns in these examples, which as of writing are alpha status. The API and conventions will likely change, such as `useFormStatus` and passing a function to `<form action={likeAction}>`, but the principles I’m demonstrating are stable.
+
+</Aside>
+
+You might look at this and say “So what? I write components with children all the time.” What’s special here is that I can pass a component that fetches data as the child of this button.
+
+```javascript
+// This is a server component
+async function LikeCount({ postId }) {
+  const likes = await getLikeCount(postId);
+
+  return <>{likes}</>;
+}
+
+function LikeForm({ postId, likeAction }) {
+  return (
+    <form action={likeAction}>
+      <LoaderButton>
+        <LikeCount postId={postId} />
+      </LoaderButton>
+    </form>
+  );
+}
+```
+
+This works with any prop, not just children. In fact, you could have several props which all accept React elements, and each of them could render a different server component.
+
+Again, the only caveat with this approach is that the server components have to be rendered by another server component, so you might end up doing multiple layers of passing children in your client components.
+
+## Tip 4: Don’t Forget Shared Components
+
+Client components are easy to spot - just look for “use client” at the top of the file.
+
+Server components are a little trickier. The first component in a server component tree is always a server component, so you can follow the server component tree down until you run into a client component. And if you find an `async function MyComponent()` component, it’s most likely a server component.
+
+But there’s a third flavor that is compatible with _both_ server components and client components. Shared Components neither fetch data nor have interactivity. They might have a bit of logic and render some markup, but that’s it. Because they’re so simple, they can be rendered in server components _and_ client components without issue.
+
+So even if a component isn’t fetching any data, there’s no need to slap a `"use client"` at the top of the file. In fact, you should only do that if the component is explicitly using client-only features - again, those features include event callbacks, `useState`, `useEffect`, `useRef` - the kind of things that kind of require a browser to run.
+
+## Bonus Tip: Server Actions
+
+As a counterpart to Server Components fetching data, the React team has introduced Server Actions for performing mutations. Think of Server Components as GET requests, and Server Actions as POST requests.
+
+Server Actions are currently in alpha status, so don’t expect much documentation or stability. But if you decide to venture even further along the bleeding edge, here’s a tidbit about error handling.
+
+For Server Components, all errors are handled by wrapping the component in an Error Boundary (which is a client component, by necessity) and declaratively displaying the error message there.
+
+Server Actions, on the other hand, are more imperative, being fired through user interaction. So instead of just throwing errors and setting up messy error boundaries to handle them, just treat the errors as data and return them.
+
+[This tweet from Dan Abramov](https://twitter.com/dan_abramov/status/1654336219919048704?s=20) suggests putting errors into React state (requiring that your [server actions are called from a client component](https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions#usage-with-client-components)) and reveals that first-class support for this kind of situation will be included in React someday.
+
+---
+
+That’s all! If you can think of any other tips for using React Server Components, hit us up on Twitter.
+
+_Edit: Added a section about how `"use client"` isn't required for all client components, and how client components can still be server-side rendered. Thanks to Dan Abramov for the suggestion and feedback._

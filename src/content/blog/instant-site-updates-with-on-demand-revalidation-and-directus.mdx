@@ -1,0 +1,96 @@
+---
+title: Instant Site Updates with On-Demand Revalidation and Directus
+publishDate: Thu Dec 15 2022 00:00:00 GMT-0500 (Eastern Standard Time)
+excerpt: Live the CMS dream by having your changes instantly appear whenever you update your CMS while not sacrificing page load speeds.
+featureImage:
+  src: '/assets/blog/instant-site-updates-with-on-demand-revalidation-and-directus.jpg'
+  alt: 'a wind turbine at sunset'
+---
+
+import Aside from '../../components/Aside.astro';
+
+<small>This post was originally written for the [Echobind blog](https://echobind.com/blog).</small>
+
+
+Everybody loves a fast website, but there’s a balance between page speed, capabilities, and developer experience. For a lot of websites, a Static Site Generator like Next.js ticks all the right boxes. They essentially pre-cache every page in the site at build-type. But that’s also the biggest downside to SSGs — long build times.
+
+When your website pulls in data from many remote sources, it’s tough to know what pages changed and which stayed the same. So they just build all of them. When your site is based on lots of rapidly-updating data with a lot of pages, that’s a recipe for agonizingly long build times.
+
+Next.js has a bunch of features to help with this. `getStaticPaths` lets you choose which pages to pre-build and which to generate at runtime when a user requests them. And [Incremental Static Regeneration](https://nextjs.org/docs/basic-features/data-fetching/incremental-static-regeneration#on-demand-revalidation) will show visitors the pre-built pages while generating a fresh version in the background on a revalidate interval.
+
+```javascript
+export const getStaticProps = async (context) => {
+  const data = await fetchBlogData(context.params.slug);
+
+  if (!data) {
+    return { notFound: true };
+  }
+  // Revalidate the page at most once every 60 seconds
+  return { props: data, revalidate: 60 };
+};
+```
+
+It’s a great middle-ground solution - users still get fast page loads and they’ll eventually get the freshest data. But with a pull-based architecture like this, there’s not a lot more we can do to make this load faster. Instead, we need some kind of notification from our data providers that certain pages need to be updated.
+
+### [On-Demand Revalidation](https://nextjs.org/docs/basic-features/data-fetching/incremental-static-regeneration#on-demand-revalidation)
+
+For the longest times, static hosts have offered webhooks that let CMSs and other data providers say when a site should be rebuilt with new data. For example, a new blog post is added, the webhook is called, the site is rebuilt, and after a time the blog post is live.
+
+On-Demand Revalidation is a feature of Next.js that takes this idea and lets you target specific pages with surgical precision. Instead of a webhook for the entire site, On-Demand Revalidation starts in a Next.js API route. In it, we can call a special API on `res.revalidate` which lets us pass the page path to revalidate. When we call it, Next.js will revalidate just that page in mere moments, publishing the freshest data possible in mere moments.
+
+```javascript
+export default async function handler(req, res) {
+  // Check for secret to confirm this is a valid request
+  if (req.query.secret !== process.env.REVALIDATION_SECRET) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+
+  try {
+    await Promise.all([res.revalidate(`/post/${req.query.post}`), res.revalidate('/blog')]);
+    return res.json({ revalidated: true });
+  } catch (err) {
+    // If there was an error, Next.js will continue
+    // to show the last successfully generated page
+    return res.status(500).send('Error revalidating');
+  }
+}
+```
+
+Notice that we’re calling `res.revalidate` for both the individual post page and for the blog index page. This makes it so any new blog post or updated titles correctly appear in the blog index. If we had separate index pages for each blog post tag, we’d want to revalidate those too.
+
+Now we just need a way to call this whenever we change a post.
+
+### Calling Webhooks with Directus Flows
+
+Every CMS and data provider is different. Hopefully yours has some way to perform some logic, like calling a webhook, when a change happens to some part of data. In [Directus](https://directus.io/), we do this with flows.
+
+![The flow structure for revalidation](/assets/blog/revalidate-flow-1.jpg)
+
+Flows allow us to respond to _triggers_ by chaining _operations_ to each other. We’ll configure an Action trigger which listens for the `item.create`, `item.update` and `item.delete` scopes on the `Posts` collection.
+
+![Configuring the flow trigger](/assets/blog/revalidate-flow-2.jpg)
+
+
+<Aside>
+
+Debugging flows can be a little bit tricky. Fortunately, the flow’s sidebar shows a running log of all of the times the flow runs. This can help track the changes in the data as the flow progresses through the operations.
+
+</Aside>
+
+Next, we need to fetch the post object from the database so we know what slug to send to our revalidate API. This is included in the `item.create` actions, but not always for `item.update`, so we need to grab it ourselves. For that, we’ll use a `Read Data` operation that fetches from the Posts collection using the `$trigger.keys` as the ID to fetch.
+
+![Determining the keys to fetch](/assets/blog/revalidate-flow-3.jpg)
+
+<Aside>
+
+`$trigger.keys` comes from the trigger. It’s a list of IDs for all of the items that were affected. Run your flow and check the logs to see the other data that is provided by the trigger.
+
+</Aside>
+
+The final operation is to send the post slug to the API route webhook. In the code above you can see the post slug is on the `post` query param. We also pass a `secret` query param that is included in our Directus flow to keep third-parties from abusing our revalidate endpoint.
+
+![Sending the POST request](/assets/blog/revalidate-flow-4.jpg)
+
+That’s all we need! After saving the flow, we can publish, edit, or delete blog posts and the published site should update almost instantly, or at very least significantly faster than the 60 second revalidate timer.
+
+Of course, this could be expanded to many other uses. An e-commerce website could list remaining quantity on an item that is always up-to-date. A comments section could be statically rendered while still showing the latest comments as soon as they are posted. That’s what the power and flexibility of this API can do for you.
